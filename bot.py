@@ -57,20 +57,95 @@ async def on_ready():
     status_text = persona_manager.persona.get("activity_responses", {}).get("bot_status", "It's not like I want to help! | !help_ai")
     await bot.change_presence(activity=discord.Game(name=status_text))
 
+async def should_search_web(question):
+    """Determine if a question would benefit from web search"""
+    search_indicators = [
+        # Current events and news
+        'latest', 'recent', 'current', 'news', 'today', 'this year', '2024', '2025',
+        # Specific information requests
+        'what is', 'who is', 'where is', 'when did', 'how to', 'tutorial',
+        # Product/company/technology queries
+        'price', 'cost', 'buy', 'download', 'install', 'specs', 'review',
+        # Location-based queries
+        'near me', 'location', 'address', 'directions',
+        # Factual lookups
+        'definition', 'meaning', 'explain', 'about',
+        # Technology and tools
+        'github', 'documentation', 'docs', 'api', 'library', 'framework',
+        # Specific brands/products
+        'esp32', 'arduino', 'raspberry pi', 'python', 'javascript', 'react', 'vue',
+        'nvidia', 'amd', 'intel', 'microsoft', 'google', 'apple', 'amazon',
+    ]
+    
+    question_lower = question.lower()
+    
+    # Check for search indicators
+    for indicator in search_indicators:
+        if indicator in question_lower:
+            return True
+    
+    # Check for question words that often need current info
+    question_starters = ['what', 'who', 'where', 'when', 'how', 'why']
+    first_word = question_lower.split()[0] if question_lower.split() else ''
+    
+    if first_word in question_starters:
+        # Additional checks for questions that likely need web search
+        if any(word in question_lower for word in ['company', 'website', 'service', 'app', 'software', 'tool']):
+            return True
+    
+    return False
+
 @bot.command(name='ai', aliases=['ask', 'chat'])
 async def ask_gemini(ctx, *, question):
-    """Ask Gemini AI a question"""
+    """Ask Gemini AI a question with intelligent search integration"""
     try:
         # Update social interaction
         social.update_interaction(ctx.author.id)
         
         # Show typing indicator
         async with ctx.typing():
-            # Create tsundere persona prompt
-            tsundere_prompt = personality.create_ai_prompt(question)
+            # Check if this question would benefit from web search
+            needs_search = await should_search_web(question)
             
-            # Generate response using API manager with automatic rotation
-            response_text = await api_manager.generate_content(tsundere_prompt)
+            if needs_search and search is not None:
+                print(f"🔍 AI detected search need for: {question}")
+                
+                # Extract search terms from the question
+                search_query = await extract_search_terms(question)
+                print(f"🎯 Extracted search terms: {search_query}")
+                
+                # Get search results
+                search_results = await search.search_duckduckgo(search_query)
+                
+                # Create enhanced prompt with search results
+                enhanced_prompt = f"""You are Coffee, a tsundere AI assistant. The user asked: "{question}"
+
+I searched the web and found this information:
+{search_results}
+
+Your task:
+1. Answer the user's question using both your knowledge AND the search results
+2. Maintain your tsundere personality throughout
+3. If the search results are relevant, incorporate them naturally
+4. If the search results aren't helpful, rely on your knowledge but mention you tried to search
+5. Keep your response under 1800 characters for Discord
+6. Use your speech patterns: "Ugh", "baka", "It's not like...", etc.
+
+Be helpful but act annoyed about having to search for them."""
+
+                response_text = await api_manager.generate_content(enhanced_prompt)
+                
+                if response_text:
+                    print(f"🤖 Enhanced AI response with search: {response_text[:100]}...")
+                else:
+                    # Fallback to normal AI if enhanced fails
+                    print("⚠️ Enhanced AI failed, falling back to normal response")
+                    tsundere_prompt = personality.create_ai_prompt(question)
+                    response_text = await api_manager.generate_content(tsundere_prompt)
+            else:
+                # Normal AI response without search
+                tsundere_prompt = personality.create_ai_prompt(question)
+                response_text = await api_manager.generate_content(tsundere_prompt)
             
             if response_text is None:
                 # All API attempts failed
@@ -88,7 +163,27 @@ async def ask_gemini(ctx, *, question):
                 await ctx.send(response_text)
                 
     except Exception as e:
+        print(f"💥 AI command error: {str(e)}")
         await ctx.send(personality.get_error_response(e))
+
+async def extract_search_terms(question):
+    """Extract relevant search terms from a question"""
+    # Remove common question words and extract key terms
+    stop_words = {'what', 'is', 'are', 'how', 'to', 'do', 'does', 'can', 'could', 'would', 'should', 
+                  'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'by', 'for', 'with', 
+                  'about', 'tell', 'me', 'you', 'i', 'my', 'your'}
+    
+    words = question.lower().split()
+    key_words = [word.strip('.,!?') for word in words if word.lower() not in stop_words and len(word) > 2]
+    
+    # Take the most relevant terms (limit to avoid overly long queries)
+    search_terms = ' '.join(key_words[:5])
+    
+    # If no good terms found, use the original question
+    if not search_terms.strip():
+        search_terms = question
+    
+    return search_terms
 
 @bot.command(name='help_ai', aliases=['commands'])
 async def help_command(ctx):
