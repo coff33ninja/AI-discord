@@ -1,9 +1,8 @@
 import discord
 from discord.ext import commands
-import google.generativeai as genai
 import os
 import asyncio
-import concurrent.futures
+import random
 from dotenv import load_dotenv
 
 # Import our tsundere modules
@@ -13,13 +12,15 @@ from modules.games import TsundereGames
 from modules.social import TsundereSocial
 from modules.server_actions import TsundereServerActions
 from modules.persona_manager import PersonaManager
+from modules.search import TsundereSearch
+from modules.api_manager import GeminiAPIManager
 
 # Load environment variables
 load_dotenv()
 
-# Configure Gemini AI
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-2.5-flash')
+# Initialize API Manager with rotating keys
+api_manager = GeminiAPIManager()
+model = api_manager.get_current_model()
 
 # Bot setup
 intents = discord.Intents.default()
@@ -33,19 +34,28 @@ utilities = None  # Will be initialized after model is ready
 games = TsundereGames()
 social = TsundereSocial()
 server_actions = TsundereServerActions()
+search = None  # Will be initialized after model is ready
 
 @bot.event
 async def on_ready():
-    global utilities
+    global utilities, search
     print(f'{bot.user} has connected to Discord!')
     print(f'Bot is in {len(bot.guilds)} guilds')
     
-    # Initialize utilities with the model
+    # Initialize utilities and search with the model
+    print("🔧 Initializing utilities...")
     utilities = TsundereUtilities(model)
+    print("🔍 Initializing search module...")
+    search = TsundereSearch(model)
+    print("✅ All modules initialized successfully!")
+    
+    # Print API manager status
+    status = api_manager.get_status()
+    print(f"🔑 Using {status['total_keys']} API key(s), currently on key #{status['current_key']}")
     
     # Set tsundere status
-    status = persona_manager.persona.get("activity_responses", {}).get("bot_status", "It's not like I want to help! | !help_ai")
-    await bot.change_presence(activity=discord.Game(name=status))
+    status_text = persona_manager.persona.get("activity_responses", {}).get("bot_status", "It's not like I want to help! | !help_ai")
+    await bot.change_presence(activity=discord.Game(name=status_text))
 
 @bot.command(name='ai', aliases=['ask', 'chat'])
 async def ask_gemini(ctx, *, question):
@@ -59,29 +69,23 @@ async def ask_gemini(ctx, *, question):
             # Create tsundere persona prompt
             tsundere_prompt = personality.create_ai_prompt(question)
             
-            # Generate response using Gemini with timeout protection
-            # Run the blocking API call in a thread pool with timeout
-            loop = asyncio.get_event_loop()
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                try:
-                    response = await asyncio.wait_for(
-                        loop.run_in_executor(executor, model.generate_content, tsundere_prompt),
-                        timeout=30.0  # 30 second timeout
-                    )
-                except asyncio.TimeoutError:
-                    # Generate a quick timeout response using fallback
-                    timeout_response = personality.get_error_response("AI timeout")
-                    await ctx.send(timeout_response)
-                    return
+            # Generate response using API manager with automatic rotation
+            response_text = await api_manager.generate_content(tsundere_prompt)
+            
+            if response_text is None:
+                # All API attempts failed
+                timeout_response = personality.get_error_response("AI timeout")
+                await ctx.send(timeout_response)
+                return
             
             # Discord has a 2000 character limit for messages
-            if len(response.text) > 2000:
+            if len(response_text) > 2000:
                 # Split long responses
-                chunks = [response.text[i:i+2000] for i in range(0, len(response.text), 2000)]
+                chunks = [response_text[i:i+2000] for i in range(0, len(response_text), 2000)]
                 for chunk in chunks:
                     await ctx.send(chunk)
             else:
-                await ctx.send(response.text)
+                await ctx.send(response_text)
                 
     except Exception as e:
         await ctx.send(personality.get_error_response(e))
@@ -107,6 +111,11 @@ async def help_command(ctx):
         inline=False
     )
     embed.add_field(
+        name="**Search**",
+        value="`!search <query>` (or `!google`, `!find`) - Search the web\n`!websearch <query>` (or `!web`) - Alternative web search",
+        inline=False
+    )
+    embed.add_field(
         name="**Games**",
         value="`!game guess [max]` - Number guessing\n`!guess <number>` - Make a guess\n`!rps <choice>` (or `!rock`, `!paper`, `!scissors`) - Rock Paper Scissors\n`!8ball <question>` - Magic 8-ball\n`!trivia` - Start trivia game\n`!answer <answer>` - Answer trivia",
         inline=False
@@ -118,7 +127,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="**Admin Commands** (admin only)",
-        value="`!reload_persona` - Reload personality config\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
+        value="`!reload_persona` - Reload personality config\n`!api_status` - Check API key status\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
         inline=False
     )
     embed.set_footer(text=help_config.get("footer", "Use these commands!"))
@@ -138,12 +147,14 @@ async def on_message(message):
             relationship_level = user_data['relationship_level']
             
             # Generate AI response for being mentioned
-            response = await persona_manager.get_ai_generated_response(
-                model, f"mentioned me in chat: '{message.content}'", 
+            prompt = persona_manager.create_ai_prompt(
+                f"mentioned me in chat: '{message.content}'", 
                 message.author.display_name, relationship_level
             )
+            response = await api_manager.generate_content(prompt)
             
-            await message.channel.send(response)
+            if response:
+                await message.channel.send(response)
         except discord.Forbidden:
             # Bot doesn't have permission to send messages in this channel
             pass
@@ -161,11 +172,17 @@ async def compliment_ai(ctx):
     relationship_level = user_data['relationship_level']
     
     # Generate AI response for compliment command
-    response = await persona_manager.get_ai_generated_response(
-        model, "!compliment command", ctx.author.display_name, relationship_level
+    prompt = persona_manager.create_ai_prompt(
+        "!compliment command", ctx.author.display_name, relationship_level
     )
+    response = await api_manager.generate_content(prompt)
     
-    await ctx.send(response)
+    if response:
+        await ctx.send(response)
+    else:
+        # Fallback to persona card response
+        fallback = personality.get_error_response("AI unavailable")
+        await ctx.send(fallback)
 
 # Social Commands
 @bot.command(name='mood')
@@ -175,11 +192,17 @@ async def check_mood(ctx):
     relationship_level = user_data['relationship_level']
     
     # Generate AI response for mood command
-    response = await persona_manager.get_ai_generated_response(
-        model, "!mood command", ctx.author.display_name, relationship_level
+    prompt = persona_manager.create_ai_prompt(
+        "!mood command", ctx.author.display_name, relationship_level
     )
+    response = await api_manager.generate_content(prompt)
     
-    await ctx.send(response)
+    if response:
+        await ctx.send(response)
+    else:
+        # Fallback to persona card response
+        fallback = personality.get_error_response("AI unavailable")
+        await ctx.send(fallback)
 
 @bot.command(name='relationship')
 async def check_relationship(ctx):
@@ -189,12 +212,18 @@ async def check_relationship(ctx):
     interactions = user_data['interactions']
     
     # Generate AI response for relationship command
-    response = await persona_manager.get_ai_generated_response(
-        model, f"!relationship command (level: {relationship_level}, interactions: {interactions})", 
+    prompt = persona_manager.create_ai_prompt(
+        f"!relationship command (level: {relationship_level}, interactions: {interactions})", 
         ctx.author.display_name, relationship_level
     )
+    response = await api_manager.generate_content(prompt)
     
-    await ctx.send(response)
+    if response:
+        await ctx.send(response)
+    else:
+        # Fallback to persona card response with relationship info
+        fallback = persona_manager.get_relationship_response(relationship_level, "greeting")
+        await ctx.send(f"{fallback} (Interactions: {interactions}, Level: {relationship_level})")
 
 # Utility Commands
 @bot.command(name='time')
@@ -248,6 +277,71 @@ async def get_cat_fact(ctx):
     async with ctx.typing():
         response = await utilities.get_cat_fact()
     await ctx.send(response)
+
+# Search Commands
+@bot.command(name='search', aliases=['google', 'find'])
+async def search_web(ctx, *, query):
+    """Search the web using DuckDuckGo"""
+    try:
+        # Check if search module is initialized
+        if search is None:
+            await ctx.send("Search module not ready yet! Try again in a moment.")
+            return
+        
+        # Update social interaction
+        social.update_interaction(ctx.author.id)
+        
+        print(f"🔍 Search command called with query: {query}")
+        
+        async with ctx.typing():
+            response = await search.search_duckduckgo(query)
+        
+        print(f"📝 Search response: {response[:100]}...")
+        
+        # Discord has a 2000 character limit for messages
+        if len(response) > 2000:
+            # Split long responses
+            chunks = [response[i:i+2000] for i in range(0, len(response), 2000)]
+            for chunk in chunks:
+                await ctx.send(chunk)
+        else:
+            await ctx.send(response)
+            
+    except Exception as e:
+        print(f"💥 Search command error: {str(e)}")
+        await ctx.send(personality.get_error_response(e))
+
+@bot.command(name='websearch', aliases=['web'])
+async def web_search_command(ctx, *, query):
+    """Alternative web search using HTML parsing"""
+    try:
+        # Check if search module is initialized
+        if search is None:
+            await ctx.send("Search module not ready yet! Try again in a moment.")
+            return
+        
+        # Update social interaction
+        social.update_interaction(ctx.author.id)
+        
+        print(f"🌐 Web search command called with query: {query}")
+        
+        async with ctx.typing():
+            response = await search.web_search(query)
+        
+        print(f"📝 Web search response: {response[:100]}...")
+        
+        # Discord has a 2000 character limit for messages
+        if len(response) > 2000:
+            # Split long responses
+            chunks = [response[i:i+2000] for i in range(0, len(response), 2000)]
+            for chunk in chunks:
+                await ctx.send(chunk)
+        else:
+            await ctx.send(response)
+            
+    except Exception as e:
+        print(f"💥 Web search command error: {str(e)}")
+        await ctx.send(personality.get_error_response(e))
 
 # Game Commands
 @bot.command(name='game')
@@ -358,17 +452,30 @@ async def reload_persona(ctx):
         relationship_level = user_data['relationship_level']
         
         # Generate AI response for reload command
-        response = await persona_manager.get_ai_generated_response(
-            model, f"!reload_persona command (result: {result})", ctx.author.display_name, relationship_level
+        prompt = persona_manager.create_ai_prompt(
+            f"!reload_persona command (result: {result})", ctx.author.display_name, relationship_level
         )
+        response = await api_manager.generate_content(prompt)
         
-        await ctx.send(response)
+        if response:
+            await ctx.send(response)
+        else:
+            # Fallback to persona card response
+            fallback = persona_manager.get_activity_response("admin", "reload_success", result=result)
+            await ctx.send(fallback)
     else:
         # Generate AI response for no permission
-        response = await persona_manager.get_ai_generated_response(
-            model, "!reload_persona command (no permission)", ctx.author.display_name, "stranger"
+        prompt = persona_manager.create_ai_prompt(
+            "!reload_persona command (no permission)", ctx.author.display_name, "stranger"
         )
-        await ctx.send(response)
+        response = await api_manager.generate_content(prompt)
+        
+        if response:
+            await ctx.send(response)
+        else:
+            # Fallback to persona card response
+            fallback = persona_manager.get_activity_response("admin", "no_permission")
+            await ctx.send(fallback)
 
 @bot.command(name='shutdown', aliases=['kill', 'stop'])
 async def shutdown_bot(ctx):
@@ -379,15 +486,27 @@ async def shutdown_bot(ctx):
         relationship_level = user_data['relationship_level']
         
         # Generate AI response for shutdown command
-        response = await persona_manager.get_ai_generated_response(
-            model, "!shutdown command", ctx.author.display_name, relationship_level
+        prompt = persona_manager.create_ai_prompt(
+            "!shutdown command", ctx.author.display_name, relationship_level
         )
+        response = await api_manager.generate_content(prompt)
         
-        await ctx.send(response)
+        if response:
+            await ctx.send(response)
+        else:
+            # Fallback to persona card response
+            shutdown_responses = persona_manager.get_activity_response("admin", "shutdown")
+            if isinstance(shutdown_responses, list):
+                fallback = random.choice(shutdown_responses)
+            else:
+                fallback = shutdown_responses
+            await ctx.send(fallback)
         print(f"Bot shutdown requested by {ctx.author}")
         
-        # Save any pending data
+        # Save any pending data and close search session
         social.save_user_data()
+        if search:
+            await search.close_session()
         
         # Close bot connection and exit
         await bot.close()
@@ -397,10 +516,17 @@ async def shutdown_bot(ctx):
         sys.exit(0)
     else:
         # Generate AI response for no permission
-        response = await persona_manager.get_ai_generated_response(
-            model, "!shutdown command (no permission)", ctx.author.display_name, "stranger"
+        prompt = persona_manager.create_ai_prompt(
+            "!shutdown command (no permission)", ctx.author.display_name, "stranger"
         )
-        await ctx.send(response)
+        response = await api_manager.generate_content(prompt)
+        
+        if response:
+            await ctx.send(response)
+        else:
+            # Fallback to persona card response
+            fallback = persona_manager.get_activity_response("admin", "no_permission")
+            await ctx.send(fallback)
 
 @bot.command(name='restart', aliases=['reboot'])
 async def restart_bot(ctx):
@@ -411,15 +537,27 @@ async def restart_bot(ctx):
         relationship_level = user_data['relationship_level']
         
         # Generate AI response for restart command
-        response = await persona_manager.get_ai_generated_response(
-            model, "!restart command", ctx.author.display_name, relationship_level
+        response_text = await api_manager.generate_content(
+            persona_manager.create_ai_prompt("!restart command", ctx.author.display_name, relationship_level)
         )
         
-        await ctx.send(response)
+        if response_text:
+            await ctx.send(response_text)
+        else:
+            # Fallback to persona card response
+            restart_responses = persona_manager.get_activity_response("admin", "restart")
+            if isinstance(restart_responses, list):
+                fallback = random.choice(restart_responses)
+            else:
+                fallback = restart_responses
+            await ctx.send(fallback)
+        
         print(f"Bot restart requested by {ctx.author}")
         
-        # Save any pending data
+        # Save any pending data and close search session
         social.save_user_data()
+        if search:
+            await search.close_session()
         
         # Close bot connection
         await bot.close()
@@ -431,10 +569,52 @@ async def restart_bot(ctx):
         os.execv(sys.executable, ['python'] + sys.argv)
     else:
         # Generate AI response for no permission
-        response = await persona_manager.get_ai_generated_response(
-            model, "!restart command (no permission)", ctx.author.display_name, "stranger"
+        response_text = await api_manager.generate_content(
+            persona_manager.create_ai_prompt("!restart command (no permission)", ctx.author.display_name, "stranger")
         )
-        await ctx.send(response)
+        
+        if response_text:
+            await ctx.send(response_text)
+        else:
+            # Fallback to persona card response
+            fallback = persona_manager.get_activity_response("admin", "no_permission")
+            await ctx.send(fallback)
+
+@bot.command(name='api_status')
+async def api_status(ctx):
+    """Check API key status (admin only)"""
+    if ctx.author.guild_permissions.administrator:
+        status = api_manager.get_status()
+        
+        embed = discord.Embed(
+            title="🔑 API Key Status",
+            description=f"Managing {status['total_keys']} API key(s)",
+            color=0x00ff00
+        )
+        
+        for key_info in status['keys']:
+            status_emoji = "🟢" if key_info['available'] else "🔴"
+            current_emoji = "👈" if key_info['is_current'] else ""
+            
+            field_name = f"{status_emoji} Key #{key_info['key_number']} {current_emoji}"
+            
+            field_value = f"Requests: {key_info['requests_this_minute']}/{key_info['rate_limit']}\n"
+            field_value += f"Errors: {key_info['errors']}\n"
+            
+            if key_info['in_cooldown']:
+                field_value += f"⏰ Cooldown until: {key_info['cooldown_expires'][:19]}"
+            elif key_info['available']:
+                field_value += "✅ Available"
+            else:
+                field_value += "⚠️ Rate limited"
+            
+            embed.add_field(name=field_name, value=field_value, inline=True)
+        
+        await ctx.send(embed=embed)
+    else:
+        # Fallback to persona card response
+        fallback = persona_manager.get_activity_response("admin", "no_permission")
+        await ctx.send(fallback)
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -467,9 +647,11 @@ if __name__ == '__main__':
     def signal_handler(sig, frame):
         """Handle Ctrl+C gracefully"""
         print('\n🛑 Shutdown signal received...')
-        # Save any pending data
+        # Save any pending data and cleanup
         if 'social' in globals():
             social.save_user_data()
+        if 'search' in globals() and search:
+            asyncio.run(search.close_session())
         print('👋 Coffee is shutting down... Goodbye!')
         sys.exit(0)
     
@@ -480,13 +662,17 @@ if __name__ == '__main__':
         bot.run(os.getenv('DISCORD_TOKEN'))
     except KeyboardInterrupt:
         print('\n🛑 Bot interrupted by user')
-        # Save any pending data
+        # Save any pending data and cleanup
         if 'social' in globals():
             social.save_user_data()
+        if 'search' in globals() and search:
+            asyncio.run(search.close_session())
         print('👋 Coffee is shutting down... Goodbye!')
     except Exception as e:
         print(f'❌ Bot crashed: {e}')
-        # Save any pending data
+        # Save any pending data and cleanup
         if 'social' in globals():
             social.save_user_data()
+        if 'search' in globals() and search:
+            asyncio.run(search.close_session())
         raise

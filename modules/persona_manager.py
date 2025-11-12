@@ -72,6 +72,25 @@ Based on your personality and what the user did, generate ONE authentic response
         
         return prompt
     
+    def create_ai_prompt(self, user_action, user_name=None, relationship_level="stranger"):
+        """Create AI prompt for use with API manager"""
+        if user_name:
+            return self.get_ai_response_prompt(user_action, user_name, relationship_level)
+        else:
+            # For general AI questions without specific user context
+            persona_json = json.dumps(self.persona, indent=2)
+            
+            prompt = f"""PERSONA CARD:
+{persona_json}
+
+You ARE the character described above. Embody this personality completely.
+
+USER QUESTION: {user_action}
+
+Generate an authentic response as the character described in the persona card."""
+            
+            return prompt
+    
     def get_response(self, response_type, **kwargs):
         """Get a random response of the specified type"""
         responses = self.persona.get("response_templates", {}).get(response_type, [])
