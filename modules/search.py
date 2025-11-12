@@ -102,15 +102,27 @@ class TsundereSearch:
                         print(f"🔄 Fallback result: {fallback_result[:100]}...")
                         return fallback_result
                 else:
-                    print(f"❌ Bad response status: {response.status}")
-                    return self._get_error_response(query)
+                    print(f"❌ API returned status {response.status}, trying web search fallback...")
+                    fallback_result = await self.web_search(query, max_results)
+                    print(f"🔄 Fallback result: {fallback_result[:100]}...")
+                    return fallback_result
                     
         except asyncio.TimeoutError:
-            print("⏰ Search timed out")
-            return self._get_timeout_response(query)
+            print("⏰ API search timed out, trying web search fallback...")
+            try:
+                fallback_result = await self.web_search(query, max_results)
+                print(f"🔄 Timeout fallback result: {fallback_result[:100]}...")
+                return fallback_result
+            except Exception:
+                return self._get_timeout_response(query)
         except Exception as e:
-            print(f"💥 Search error: {str(e)}")
-            return self._get_error_response(query, str(e))
+            print(f"💥 API search error: {str(e)}, trying web search fallback...")
+            try:
+                fallback_result = await self.web_search(query, max_results)
+                print(f"🔄 Error fallback result: {fallback_result[:100]}...")
+                return fallback_result
+            except Exception:
+                return self._get_error_response(query, str(e))
     
     def _format_instant_answer(self, query, data):
         """Format instant answer results"""
