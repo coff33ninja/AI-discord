@@ -138,11 +138,9 @@ async def on_message(message):
             relationship_level = user_data['relationship_level']
             
             # Generate AI response for being mentioned
-            context = f"The user {message.author.display_name} just mentioned me randomly in chat. I should respond in character - annoyed but secretly pleased they're thinking of me."
             response = await persona_manager.get_ai_generated_response(
-                model, context, relationship_level,
-                action="mentioned", user=message.author.display_name, 
-                message_content=message.content
+                model, f"mentioned me in chat: '{message.content}'", 
+                message.author.display_name, relationship_level
             )
             
             await message.channel.send(response)
@@ -162,11 +160,9 @@ async def compliment_ai(ctx):
     user_data = social.update_interaction(ctx.author.id)
     relationship_level = user_data['relationship_level']
     
-    # Generate AI response for receiving compliment
-    context = f"The user {ctx.author.display_name} just complimented me. I need to respond in a flustered, defensive tsundere way while secretly being happy about it."
+    # Generate AI response for compliment command
     response = await persona_manager.get_ai_generated_response(
-        model, context, relationship_level,
-        action="compliment_received", user=ctx.author.display_name
+        model, "!compliment command", ctx.author.display_name, relationship_level
     )
     
     await ctx.send(response)
@@ -178,11 +174,9 @@ async def check_mood(ctx):
     user_data = social.get_user_relationship(ctx.author.id)
     relationship_level = user_data['relationship_level']
     
-    # Generate AI response about current mood
-    context = f"The user {ctx.author.display_name} is asking about my current mood. I should respond in character about how I'm feeling right now."
+    # Generate AI response for mood command
     response = await persona_manager.get_ai_generated_response(
-        model, context, relationship_level,
-        action="mood_check", user=ctx.author.display_name
+        model, "!mood command", ctx.author.display_name, relationship_level
     )
     
     await ctx.send(response)
@@ -194,12 +188,10 @@ async def check_relationship(ctx):
     relationship_level = user_data['relationship_level']
     interactions = user_data['interactions']
     
-    # Generate AI response about relationship status
-    context = f"The user {ctx.author.display_name} is asking about our relationship status. We are {relationship_level} level with {interactions} interactions. I should respond in character about our relationship."
+    # Generate AI response for relationship command
     response = await persona_manager.get_ai_generated_response(
-        model, context, relationship_level,
-        action="relationship_status", user=ctx.author.display_name, 
-        interactions=interactions, level=relationship_level
+        model, f"!relationship command (level: {relationship_level}, interactions: {interactions})", 
+        ctx.author.display_name, relationship_level
     )
     
     await ctx.send(response)
@@ -365,20 +357,16 @@ async def reload_persona(ctx):
         user_data = social.get_user_relationship(ctx.author.id)
         relationship_level = user_data['relationship_level']
         
-        # Generate AI response for reload
-        context = f"The user {ctx.author.display_name} asked me to reload my personality configuration. The reload result was: {result}. I need to respond in character about this."
+        # Generate AI response for reload command
         response = await persona_manager.get_ai_generated_response(
-            model, context, relationship_level,
-            action="reload_persona", result=result, user=ctx.author.display_name
+            model, f"!reload_persona command (result: {result})", ctx.author.display_name, relationship_level
         )
         
         await ctx.send(response)
     else:
         # Generate AI response for no permission
-        context = f"The user {ctx.author.display_name} tried to reload my personality but they don't have admin permissions. I need to refuse in character."
         response = await persona_manager.get_ai_generated_response(
-            model, context, "stranger",
-            action="no_permission", user=ctx.author.display_name
+            model, "!reload_persona command (no permission)", ctx.author.display_name, "stranger"
         )
         await ctx.send(response)
 
