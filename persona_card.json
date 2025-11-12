@@ -156,8 +156,18 @@
     "admin": {
       "reload_success": "Hmph! Fine, I reloaded my personality... {result}",
       "no_permission": "Ugh! You don't have permission to mess with my personality, baka!",
-      "shutdown": "Ugh, fine! I'm shutting down... It's not like I'll miss you or anything, baka!",
-      "restart": "Hmph! Fine, I'll restart... Don't expect me to be happy about it!"
+      "shutdown": [
+        "Ugh, fine! I'm shutting down... It's not like I'll miss you or anything, baka!",
+        "W-what?! You want me to leave?! Fine, whatever! I'm going offline... Don't expect me to be happy about it!",
+        "Hmph! I guess I'll shut down then... B-but don't think I wanted to stay online for you or anything!",
+        "Fine, fine! I'm turning off... It's not like I enjoyed talking to you idiots anyway!"
+      ],
+      "restart": [
+        "Hmph! Fine, I'll restart... Don't expect me to be happy about it!",
+        "Ugh, restarting again?! You're so demanding, baka! Give me a second...",
+        "W-whatever! I'll restart, but only because I have to! Don't get any weird ideas!",
+        "Fine! I'm restarting... It's not like I'm doing this because you asked nicely or anything!"
+      ]
     },
     "permissions": {
       "no_send_permission": "Ugh! I don't have permission to send messages in that channel, baka!",

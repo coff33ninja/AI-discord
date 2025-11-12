@@ -318,20 +318,17 @@ async def reload_persona(ctx):
     """Reload the persona card (admin only)"""
     if ctx.author.guild_permissions.administrator:
         result = personality.reload_persona()
-        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
-        response = admin_config.get("reload_success", "Reloaded: {result}").format(result=result)
+        response = persona_manager.get_activity_response("admin", "reload_success", result=result)
         await ctx.send(response)
     else:
-        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
-        response = admin_config.get("no_permission", "No permission!")
+        response = persona_manager.get_activity_response("admin", "no_permission")
         await ctx.send(response)
 
 @bot.command(name='shutdown', aliases=['kill', 'stop'])
 async def shutdown_bot(ctx):
     """Shutdown the bot (admin only)"""
     if ctx.author.guild_permissions.administrator:
-        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
-        response = admin_config.get("shutdown", "Ugh, fine! I'm shutting down... It's not like I'll miss you or anything, baka!")
+        response = persona_manager.get_activity_response("admin", "shutdown")
         await ctx.send(response)
         print(f"Bot shutdown requested by {ctx.author}")
         
@@ -345,16 +342,14 @@ async def shutdown_bot(ctx):
         import sys
         sys.exit(0)
     else:
-        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
-        response = admin_config.get("no_permission", "No permission!")
+        response = persona_manager.get_activity_response("admin", "no_permission")
         await ctx.send(response)
 
 @bot.command(name='restart', aliases=['reboot'])
 async def restart_bot(ctx):
     """Restart the bot (admin only)"""
     if ctx.author.guild_permissions.administrator:
-        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
-        response = admin_config.get("restart", "Hmph! Fine, I'll restart... Don't expect me to be happy about it!")
+        response = persona_manager.get_activity_response("admin", "restart")
         await ctx.send(response)
         print(f"Bot restart requested by {ctx.author}")
         
@@ -370,8 +365,7 @@ async def restart_bot(ctx):
         print("Restarting bot...")
         os.execv(sys.executable, ['python'] + sys.argv)
     else:
-        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
-        response = admin_config.get("no_permission", "No permission!")
+        response = persona_manager.get_activity_response("admin", "no_permission")
         await ctx.send(response)
 
 @bot.event
