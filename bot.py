@@ -114,6 +114,11 @@ async def help_command(ctx):
         value="`!mention @user [message]` - Mention someone\n`!create_role <name> [color]` - Create a role\n`!give_role @user <role>` - Give role to user\n`!remove_role @user <role>` - Remove role\n`!kick @user [reason]` - Kick user\n`!create_channel <name> [type]` - Create channel\n`!send_to #channel <message>` - Send message to channel",
         inline=False
     )
+    embed.add_field(
+        name="**Admin Commands** (admin only)",
+        value="`!reload_persona` - Reload personality config\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
+        inline=False
+    )
     embed.set_footer(text=help_config.get("footer", "Use these commands!"))
     await ctx.send(embed=embed)
 
@@ -316,6 +321,44 @@ async def reload_persona(ctx):
         admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
         response = admin_config.get("reload_success", "Reloaded: {result}").format(result=result)
         await ctx.send(response)
+    else:
+        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
+        response = admin_config.get("no_permission", "No permission!")
+        await ctx.send(response)
+
+@bot.command(name='shutdown', aliases=['kill', 'stop'])
+async def shutdown_bot(ctx):
+    """Shutdown the bot (admin only)"""
+    if ctx.author.guild_permissions.administrator:
+        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
+        response = admin_config.get("shutdown", "Ugh, fine! I'm shutting down... It's not like I'll miss you or anything, baka!")
+        await ctx.send(response)
+        print(f"Bot shutdown requested by {ctx.author}")
+        await bot.close()
+    else:
+        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
+        response = admin_config.get("no_permission", "No permission!")
+        await ctx.send(response)
+
+@bot.command(name='restart', aliases=['reboot'])
+async def restart_bot(ctx):
+    """Restart the bot (admin only)"""
+    if ctx.author.guild_permissions.administrator:
+        admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
+        response = admin_config.get("restart", "Hmph! Fine, I'll restart... Don't expect me to be happy about it!")
+        await ctx.send(response)
+        print(f"Bot restart requested by {ctx.author}")
+        
+        # Save any pending data
+        social.save_user_data()
+        
+        # Close and restart
+        await bot.close()
+        
+        # Note: This requires the bot to be run in a loop or with auto-restart
+        import os
+        import sys
+        os.execv(sys.executable, ['python'] + sys.argv)
     else:
         admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
         response = admin_config.get("no_permission", "No permission!")

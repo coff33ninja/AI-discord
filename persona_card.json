@@ -155,7 +155,9 @@
     },
     "admin": {
       "reload_success": "Hmph! Fine, I reloaded my personality... {result}",
-      "no_permission": "Ugh! You don't have permission to mess with my personality, baka!"
+      "no_permission": "Ugh! You don't have permission to mess with my personality, baka!",
+      "shutdown": "Ugh, fine! I'm shutting down... It's not like I'll miss you or anything, baka!",
+      "restart": "Hmph! Fine, I'll restart... Don't expect me to be happy about it!"
     },
     "permissions": {
       "no_send_permission": "Ugh! I don't have permission to send messages in that channel, baka!",

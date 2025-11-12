@@ -125,6 +125,13 @@ Coffee has a classic tsundere personality:
 | `!create_channel <name> [type]` | Create channel | `!create_channel general text` |
 | `!send_to #channel <msg>` | Send message | `!send_to #general Hello!` |
 
+### ⚙️ **Admin Commands** *(admin only)*
+| Command | Description | Example |
+|---------|-------------|---------|
+| `!reload_persona` | Reload personality config | `!reload_persona` |
+| `!shutdown` / `!kill` / `!stop` | Shutdown bot | `!shutdown` |
+| `!restart` / `!reboot` | Restart bot | `!restart` |
+
 ## 💬 Example Interactions
 
 ```
@@ -194,6 +201,42 @@ Coffee remembers every user and builds relationships over time:
 | **Close Friend** | 50+ | Very caring but extremely flustered |
 
 Relationship data is automatically saved to `user_relationships.json` and persists between bot restarts.
+
+## 🔧 Bot Management
+
+### Running the Bot
+
+**Simple Run:**
+```bash
+python bot.py
+```
+
+**Windows Batch Script:**
+```bash
+# Double-click or run in terminal
+run_bot.bat
+```
+
+**Development Mode (Auto-restart on changes):**
+```bash
+# Install watchdog first: pip install watchdog
+python dev_bot.py
+# Or use: dev_bot.bat
+```
+
+### Stopping the Bot
+
+1. **Ctrl+C** in terminal (graceful shutdown)
+2. **Close terminal window** (force stop)
+3. **Discord command**: `!shutdown` or `!kill` (admin only)
+4. **Discord restart**: `!restart` or `!reboot` (admin only)
+
+### Development Tips
+
+- Use `dev_bot.py` for development - it auto-restarts when you modify files
+- Use `!reload_persona` to reload personality changes without restarting
+- The bot saves user relationship data automatically
+- Check logs in terminal for debugging information
 
 ## 🔧 Bot Permissions
 
