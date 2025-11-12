@@ -601,7 +601,10 @@ async def shutdown_bot(ctx):
         # Save any pending data and close search session
         social.save_user_data()
         if search:
-            await search.close_session()
+            try:
+                await search.close_session()
+            except Exception as e:
+                print(f"⚠️ Error closing search session: {e}")
         
         # Close bot connection and exit
         await bot.close()
@@ -652,7 +655,10 @@ async def restart_bot(ctx):
         # Save any pending data and close search session
         social.save_user_data()
         if search:
-            await search.close_session()
+            try:
+                await search.close_session()
+            except Exception as e:
+                print(f"⚠️ Error closing search session: {e}")
         
         # Close bot connection
         await bot.close()

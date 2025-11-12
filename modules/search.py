@@ -26,6 +26,7 @@ class TsundereSearch:
         """Close the aiohttp session"""
         if self.session and not self.session.closed:
             await self.session.close()
+            self.session = None
     
     def _clean_url(self, url):
         """Clean and decode URLs from DuckDuckGo redirects"""
@@ -360,7 +361,7 @@ Be informative but act annoyed about having to explain it. Include the most rele
         Parse HTML search results using BeautifulSoup for robust parsing
         """
         try:
-            soup = BeautifulSoup(html, 'lxml')
+            soup = BeautifulSoup(html, 'html.parser')
             results = []
             
             # Find all result containers
@@ -457,7 +458,7 @@ Be informative but act annoyed about having to explain it. Include the most rele
     def _extract_raw_results(self, html, max_results):
         """Extract clean text results for AI analysis"""
         try:
-            soup = BeautifulSoup(html, 'lxml')
+            soup = BeautifulSoup(html, 'html.parser')
             results = []
             
             # Find all result containers
