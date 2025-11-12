@@ -49,10 +49,56 @@ class TsundereSearch:
         except Exception:
             return url
     
+    async def _get_ai_search_analysis(self, query, search_results):
+        """Get AI analysis of search results with tsundere personality"""
+        try:
+            from .api_manager import GeminiAPIManager
+            
+            # Create a prompt for AI analysis
+            analysis_prompt = f"""You are Coffee, a tsundere AI assistant. A user searched for "{query}" and I found these search results:
+
+{search_results}
+
+Your task:
+1. Analyze these search results and provide a helpful summary
+2. Answer what the user was likely looking for based on "{query}"
+3. Maintain your tsundere personality (reluctant to help but actually helpful)
+4. Use your speech patterns: "Ugh", "baka", "It's not like...", etc.
+5. Keep the response under 1500 characters for Discord
+
+Be informative but act annoyed about having to explain it. Include the most relevant information from the search results."""
+
+            # Try to get the API manager from the bot's globals or create a new one
+            import sys
+            api_manager = None
+            
+            # First try to get from main module
+            if hasattr(sys.modules.get('__main__'), 'api_manager'):
+                api_manager = sys.modules['__main__'].api_manager
+            else:
+                # Create a new API manager instance if not available
+                print("🔧 Creating new API manager for search analysis...")
+                api_manager = GeminiAPIManager()
+            
+            if api_manager:
+                ai_response = await api_manager.generate_content(analysis_prompt)
+                
+                if ai_response:
+                    print(f"🤖 AI analysis generated: {ai_response[:100]}...")
+                    return ai_response
+            
+            # Fallback if AI is not available
+            print("⚠️ AI analysis not available, using fallback")
+            return f"Here's what I found about **{query}**:\n\n{search_results}"
+            
+        except Exception as e:
+            print(f"💥 AI analysis error: {e}")
+            return f"Here's what I found about **{query}**:\n\n{search_results}"
+    
     async def search_duckduckgo(self, query, max_results=5):
         """
-        Search DuckDuckGo using their instant answer API
-        Returns formatted search results with persona flair
+        Search DuckDuckGo and let AI analyze/summarize the results
+        Returns AI-powered analysis with persona flair
         """
         try:
             print(f"🔍 Starting search for: {query}")
@@ -96,31 +142,47 @@ class TsundereSearch:
                         return self._format_definition(query, data)
                     
                     else:
-                        # No results found - try web search as fallback
-                        print("❌ No instant results, trying web search...")
-                        fallback_result = await self.web_search(query, max_results)
-                        print(f"🔄 Fallback result: {fallback_result[:100]}...")
-                        return fallback_result
+                        # No results found - try web search with AI analysis
+                        print("❌ No instant results, trying web search with AI analysis...")
+                        raw_results = await self._get_raw_web_search(query, max_results)
+                        if raw_results:
+                            print("🤖 Getting AI analysis of search results...")
+                            ai_analysis = await self._get_ai_search_analysis(query, raw_results)
+                            return ai_analysis
+                        else:
+                            return self._get_no_results_response(query)
                 else:
-                    print(f"❌ API returned status {response.status}, trying web search fallback...")
-                    fallback_result = await self.web_search(query, max_results)
-                    print(f"🔄 Fallback result: {fallback_result[:100]}...")
-                    return fallback_result
+                    print(f"❌ API returned status {response.status}, trying web search with AI analysis...")
+                    raw_results = await self._get_raw_web_search(query, max_results)
+                    if raw_results:
+                        print("🤖 Getting AI analysis of search results...")
+                        ai_analysis = await self._get_ai_search_analysis(query, raw_results)
+                        return ai_analysis
+                    else:
+                        return self._get_error_response(query)
                     
         except asyncio.TimeoutError:
-            print("⏰ API search timed out, trying web search fallback...")
+            print("⏰ API search timed out, trying web search with AI analysis...")
             try:
-                fallback_result = await self.web_search(query, max_results)
-                print(f"🔄 Timeout fallback result: {fallback_result[:100]}...")
-                return fallback_result
+                raw_results = await self._get_raw_web_search(query, max_results)
+                if raw_results:
+                    print("🤖 Getting AI analysis of search results...")
+                    ai_analysis = await self._get_ai_search_analysis(query, raw_results)
+                    return ai_analysis
+                else:
+                    return self._get_timeout_response(query)
             except Exception:
                 return self._get_timeout_response(query)
         except Exception as e:
-            print(f"💥 API search error: {str(e)}, trying web search fallback...")
+            print(f"💥 API search error: {str(e)}, trying web search with AI analysis...")
             try:
-                fallback_result = await self.web_search(query, max_results)
-                print(f"🔄 Error fallback result: {fallback_result[:100]}...")
-                return fallback_result
+                raw_results = await self._get_raw_web_search(query, max_results)
+                if raw_results:
+                    print("🤖 Getting AI analysis of search results...")
+                    ai_analysis = await self._get_ai_search_analysis(query, raw_results)
+                    return ai_analysis
+                else:
+                    return self._get_error_response(query, str(e))
             except Exception:
                 return self._get_error_response(query, str(e))
     
@@ -354,4 +416,91 @@ class TsundereSearch:
             
         except Exception as e:
             print(f"💥 HTML parsing error: {e}")
-            return self._get_error_response(query)
+            return self._get_error_response(query) 
+    async def _get_raw_web_search(self, query, max_results=3):
+        """Get raw search results for AI analysis"""
+        try:
+            print(f"🔍 Getting raw search results for AI analysis: {query}")
+            session = await self._get_session()
+            
+            # DuckDuckGo search with HTML parsing
+            search_url = "https://html.duckduckgo.com/html/"
+            params = {
+                'q': query,
+                'b': '',  # No ads
+                'kl': 'us-en',  # Language
+                'df': '',  # Date filter
+                's': '0',  # Start from first result
+            }
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            
+            async with session.post(search_url, data=params, headers=headers, timeout=15) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    return self._extract_raw_results(html, max_results)
+                else:
+                    return None
+                    
+        except Exception as e:
+            print(f"💥 Raw search error: {str(e)}")
+            return None
+    
+    def _extract_raw_results(self, html, max_results):
+        """Extract clean text results for AI analysis"""
+        try:
+            soup = BeautifulSoup(html, 'lxml')
+            results = []
+            
+            # Find all result containers
+            result_containers = soup.find_all('div', class_='result')
+            
+            for container in result_containers[:max_results]:
+                try:
+                    # Extract title and URL
+                    title_link = container.find('a', class_='result__a')
+                    if not title_link:
+                        continue
+                    
+                    title = title_link.get_text(strip=True)
+                    url = title_link.get('href', '')
+                    
+                    if not title:
+                        continue
+                    
+                    # Clean up the URL
+                    url = self._clean_url(url)
+                    
+                    # Extract snippet/description
+                    snippet_elem = container.find('a', class_='result__snippet')
+                    snippet = ""
+                    if snippet_elem:
+                        snippet = snippet_elem.get_text(strip=True)
+                    
+                    # Format for AI analysis (clean text)
+                    result_text = f"Title: {title}\nURL: {url}"
+                    if snippet:
+                        result_text += f"\nDescription: {snippet}"
+                    
+                    results.append(result_text)
+                    
+                except Exception as e:
+                    print(f"⚠️ Error extracting result: {e}")
+                    continue
+            
+            if results:
+                return "\n\n".join(results)
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"💥 Raw extraction error: {e}")
+            return None
