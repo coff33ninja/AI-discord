@@ -1,0 +1,250 @@
+# Coffee - Tsundere AI Discord Bot 🤖💕
+
+A Discord bot with a classic tsundere personality powered by Google's Gemini AI. Meet Coffee - she's helpful but acts annoyed about it, uses mild swearing, and gets adorably flustered when complimented!
+
+![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Discord.py](https://img.shields.io/badge/discord.py-2.3.2-blue.svg)
+![Gemini AI](https://img.shields.io/badge/Gemini-2.5--flash-green.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+
+## 🎭 Personality
+
+Coffee has a classic tsundere personality:
+- **Reluctant Helper**: Acts annoyed while being genuinely helpful
+- **Defensive**: Gets flustered easily, especially with compliments
+- **Caring but Denying**: Obviously cares but refuses to admit it
+- **Mild Attitude**: Uses "baka," "idiot," and mild swearing when frustrated
+- **Relationship Growth**: Becomes more caring (but more flustered) as you interact more
+
+## ✨ Features
+
+### 🧠 **AI Integration**
+- **Google Gemini 2.5 Flash** for intelligent conversations
+- **Persona-driven responses** with consistent tsundere personality
+- **Context-aware** responses based on relationship level
+- **Timeout protection** for API calls (30-second limit)
+
+### 🎮 **Interactive Games**
+- **Number Guessing** with hints and attempt tracking
+- **Rock Paper Scissors** with tsundere reactions
+- **Trivia Games** with 30-second time limits
+- **Magic 8-Ball** with dramatic pauses and attitude
+
+### 🌐 **Real API Integration**
+- **Weather Data** from OpenWeatherMap
+- **Random Facts** from multiple sources
+- **Jokes API** integration (she'll act like they're stupid)
+- **Cat Facts** (she secretly loves them)
+
+### 💝 **Relationship System**
+- **Progressive Friendship**: Stranger → Acquaintance → Friend → Close Friend
+- **Interaction Tracking**: Remembers every conversation
+- **Personalized Responses**: Different reactions based on relationship level
+- **Persistent Data**: Saves relationship progress automatically
+
+### 🛠️ **Server Management**
+- **Role Management**: Create, assign, and remove roles
+- **Channel Creation**: Text and voice channels
+- **User Moderation**: Kick users with tsundere attitude
+- **Message Relay**: Send messages to specific channels
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8 or higher
+- Discord Bot Token
+- Google Gemini API Key
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/coff33ninja/AI-discord.git
+   cd AI-discord
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Set up environment variables:**
+   Create a `.env` file with:
+   ```env
+   DISCORD_TOKEN=your_discord_bot_token
+   GEMINI_API_KEY=your_gemini_api_key
+   OPENWEATHER_API_KEY=your_weather_api_key  # Optional
+   ```
+
+4. **Run the bot:**
+   ```bash
+   python bot.py
+   ```
+
+## 🎯 Commands
+
+### 🤖 **AI & Social**
+| Command | Description | Example |
+|---------|-------------|---------|
+| `!ai <question>` | Ask Coffee anything | `!ai What's the weather like?` |
+| `!help_ai` | Show all commands | `!help_ai` |
+| `!compliment` | Compliment Coffee (watch her get flustered!) | `!compliment` |
+| `!mood` | Check Coffee's current mood | `!mood` |
+| `!relationship` | See your friendship level | `!relationship` |
+
+### 🛠️ **Utilities**
+| Command | Description | Example |
+|---------|-------------|---------|
+| `!time` | Current time with attitude | `!time` |
+| `!calc <math>` | Calculator with tsundere responses | `!calc 2+2*3` |
+| `!dice [sides]` | Roll dice (default 6 sides) | `!dice 20` |
+| `!flip` | Flip a coin | `!flip` |
+| `!weather <city>` | Real weather data | `!weather Tokyo` |
+| `!fact` | Random interesting facts | `!fact` |
+| `!joke` | Random jokes | `!joke` |
+| `!catfact` | Cat facts (she loves these) | `!catfact` |
+
+### 🎮 **Games**
+| Command | Description | Example |
+|---------|-------------|---------|
+| `!game guess [max]` | Number guessing game | `!game guess 100` |
+| `!guess <number>` | Make a guess | `!guess 42` |
+| `!rps <choice>` | Rock Paper Scissors | `!rps rock` |
+| `!8ball <question>` | Magic 8-ball | `!8ball Will it rain?` |
+| `!trivia` | Timed trivia game | `!trivia` |
+| `!answer <answer>` | Answer trivia | `!answer Tokyo` |
+
+### 🔧 **Server Actions** *(requires permissions)*
+| Command | Description | Example |
+|---------|-------------|---------|
+| `!mention @user [msg]` | Mention someone | `!mention @user Hello!` |
+| `!create_role <name> [color]` | Create a role | `!create_role Member blue` |
+| `!give_role @user <role>` | Assign role | `!give_role @user Member` |
+| `!remove_role @user <role>` | Remove role | `!remove_role @user Member` |
+| `!kick @user [reason]` | Kick user | `!kick @user Spam` |
+| `!create_channel <name> [type]` | Create channel | `!create_channel general text` |
+| `!send_to #channel <msg>` | Send message | `!send_to #general Hello!` |
+
+## 💬 Example Interactions
+
+```
+User: !ai What's 2+2?
+Coffee: Ugh, seriously? It's 4, you baka! Don't ask me such obvious questions!
+
+User: @Coffee hello
+Coffee: W-what?! Don't just mention me randomly, idiot!
+
+User: !compliment
+Coffee: B-baka! Don't say weird stuff like that! I'm just doing my job, okay?!
+
+User: !weather Tokyo
+Coffee: Ugh, fine! It's 22°C in Tokyo with clear skies. Feels like 24°C... 
+       Don't blame me if you get cold, baka!
+
+User: !relationship (after 50+ interactions)
+Coffee: You're... you're actually really great, okay?! Don't make a big deal about it!
+```
+
+## 🔑 API Keys Setup
+
+### Required APIs
+1. **Discord Bot Token**
+   - Go to [Discord Developer Portal](https://discord.com/developers/applications)
+   - Create new application → Bot → Copy token
+
+2. **Google Gemini API Key**
+   - Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - Create API key → Copy key
+
+### Optional APIs
+3. **OpenWeatherMap API Key** *(for real weather data)*
+   - Sign up at [OpenWeatherMap](https://openweathermap.org/api)
+   - Free tier: 1000 calls/day
+   - Without this, weather shows mock responses
+
+## 🏗️ Project Structure
+
+```
+AI-discord/
+├── bot.py                    # Main bot application
+├── .env                      # Environment variables (create this)
+├── requirements.txt          # Python dependencies
+├── persona_card.json         # Coffee's personality configuration
+├── user_relationships.json   # Auto-generated user data
+├── README.md                 # This file
+└── modules/
+    ├── __init__.py          # Module initialization
+    ├── persona_manager.py   # Centralized personality system
+    ├── personality.py       # Tsundere personality responses
+    ├── utilities.py         # API utilities (weather, facts, etc.)
+    ├── games.py            # Interactive games
+    ├── social.py           # Relationship tracking system
+    └── server_actions.py   # Server management commands
+```
+
+## 💝 Relationship System
+
+Coffee remembers every user and builds relationships over time:
+
+| Level | Interactions | Behavior |
+|-------|-------------|----------|
+| **Stranger** | 0-4 | Cold and distant, very tsundere |
+| **Acquaintance** | 5-19 | Slightly warmer but still defensive |
+| **Friend** | 20-49 | More caring but denies it strongly |
+| **Close Friend** | 50+ | Very caring but extremely flustered |
+
+Relationship data is automatically saved to `user_relationships.json` and persists between bot restarts.
+
+## 🔧 Bot Permissions
+
+Ensure your bot has these Discord permissions:
+- ✅ Send Messages
+- ✅ Read Message History  
+- ✅ Embed Links
+- ✅ Attach Files
+- ✅ Use External Emojis
+- ✅ Manage Roles *(for server actions)*
+- ✅ Manage Channels *(for server actions)*
+- ✅ Kick Members *(for moderation)*
+
+## 🎨 Customization
+
+Coffee's personality is fully customizable through `persona_card.json`:
+- **Response templates** for different situations
+- **Speech patterns** and common phrases
+- **Relationship-specific** responses
+- **Activity responses** for games, utilities, etc.
+
+## 🐛 Troubleshooting
+
+### Common Issues
+1. **Bot not responding**: Check Discord token and bot permissions
+2. **AI not working**: Verify Gemini API key is correct
+3. **Weather not working**: Add OpenWeatherMap API key or ignore (uses mock data)
+4. **Permission errors**: Ensure bot has required server permissions
+
+### Error Handling
+Coffee handles errors gracefully with tsundere flair:
+- API timeouts (30-second limit)
+- Missing permissions
+- Invalid commands
+- Network issues
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. Coffee might act annoyed about it, but she secretly appreciates the help!
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Google Gemini AI** for the intelligent conversation capabilities
+- **Discord.py** for the excellent Discord API wrapper
+- **OpenWeatherMap** for weather data
+- Various free APIs for facts, jokes, and cat facts
+
+---
+
+*"I-it's not like I wanted you to star this repository or anything, baka!"* - Coffee 💕
