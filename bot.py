@@ -69,7 +69,9 @@ async def ask_gemini(ctx, *, question):
                         timeout=30.0  # 30 second timeout
                     )
                 except asyncio.TimeoutError:
-                    await ctx.send("Ugh! The AI is taking too long to respond, baka! Try again later!")
+                    # Generate a quick timeout response using fallback
+                    timeout_response = personality.get_error_response("AI timeout")
+                    await ctx.send(timeout_response)
                     return
             
             # Discord has a 2000 character limit for messages
@@ -131,7 +133,19 @@ async def on_message(message):
     # Tsundere reactions to mentions
     if bot.user.mentioned_in(message) and not message.content.startswith('!'):
         try:
-            await message.channel.send(personality.get_mention_response())
+            # Get user relationship for personalized response
+            user_data = social.get_user_relationship(message.author.id)
+            relationship_level = user_data['relationship_level']
+            
+            # Generate AI response for being mentioned
+            context = f"The user {message.author.display_name} just mentioned me randomly in chat. I should respond in character - annoyed but secretly pleased they're thinking of me."
+            response = await persona_manager.get_ai_generated_response(
+                model, context, relationship_level,
+                action="mentioned", user=message.author.display_name, 
+                message_content=message.content
+            )
+            
+            await message.channel.send(response)
         except discord.Forbidden:
             # Bot doesn't have permission to send messages in this channel
             pass
@@ -145,21 +159,49 @@ async def on_message(message):
 @bot.command(name='compliment')
 async def compliment_ai(ctx):
     """Compliment the AI (watch her get flustered)"""
-    social.update_interaction(ctx.author.id)
-    response = await social.give_compliment(ctx.author.id)
+    user_data = social.update_interaction(ctx.author.id)
+    relationship_level = user_data['relationship_level']
+    
+    # Generate AI response for receiving compliment
+    context = f"The user {ctx.author.display_name} just complimented me. I need to respond in a flustered, defensive tsundere way while secretly being happy about it."
+    response = await persona_manager.get_ai_generated_response(
+        model, context, relationship_level,
+        action="compliment_received", user=ctx.author.display_name
+    )
+    
     await ctx.send(response)
 
 # Social Commands
 @bot.command(name='mood')
 async def check_mood(ctx):
     """Check the AI's current mood"""
-    response = await social.get_mood()
+    user_data = social.get_user_relationship(ctx.author.id)
+    relationship_level = user_data['relationship_level']
+    
+    # Generate AI response about current mood
+    context = f"The user {ctx.author.display_name} is asking about my current mood. I should respond in character about how I'm feeling right now."
+    response = await persona_manager.get_ai_generated_response(
+        model, context, relationship_level,
+        action="mood_check", user=ctx.author.display_name
+    )
+    
     await ctx.send(response)
 
 @bot.command(name='relationship')
 async def check_relationship(ctx):
     """Check your relationship status with the AI"""
-    response = await social.get_relationship_status(ctx.author.id)
+    user_data = social.get_user_relationship(ctx.author.id)
+    relationship_level = user_data['relationship_level']
+    interactions = user_data['interactions']
+    
+    # Generate AI response about relationship status
+    context = f"The user {ctx.author.display_name} is asking about our relationship status. We are {relationship_level} level with {interactions} interactions. I should respond in character about our relationship."
+    response = await persona_manager.get_ai_generated_response(
+        model, context, relationship_level,
+        action="relationship_status", user=ctx.author.display_name, 
+        interactions=interactions, level=relationship_level
+    )
+    
     await ctx.send(response)
 
 # Utility Commands
@@ -318,17 +360,41 @@ async def reload_persona(ctx):
     """Reload the persona card (admin only)"""
     if ctx.author.guild_permissions.administrator:
         result = personality.reload_persona()
-        response = persona_manager.get_activity_response("admin", "reload_success", result=result)
+        
+        # Get user relationship for personalized response
+        user_data = social.get_user_relationship(ctx.author.id)
+        relationship_level = user_data['relationship_level']
+        
+        # Generate AI response for reload
+        context = f"The user {ctx.author.display_name} asked me to reload my personality configuration. The reload result was: {result}. I need to respond in character about this."
+        response = await persona_manager.get_ai_generated_response(
+            model, context, relationship_level,
+            action="reload_persona", result=result, user=ctx.author.display_name
+        )
+        
         await ctx.send(response)
     else:
-        response = persona_manager.get_activity_response("admin", "no_permission")
+        # Generate AI response for no permission
+        context = f"The user {ctx.author.display_name} tried to reload my personality but they don't have admin permissions. I need to refuse in character."
+        response = await persona_manager.get_ai_generated_response(
+            model, context, "stranger",
+            action="no_permission", user=ctx.author.display_name
+        )
         await ctx.send(response)
 
 @bot.command(name='shutdown', aliases=['kill', 'stop'])
 async def shutdown_bot(ctx):
     """Shutdown the bot (admin only)"""
     if ctx.author.guild_permissions.administrator:
-        response = persona_manager.get_activity_response("admin", "shutdown")
+        # Get user relationship for personalized response
+        user_data = social.get_user_relationship(ctx.author.id)
+        relationship_level = user_data['relationship_level']
+        
+        # Generate AI response for shutdown command
+        response = await persona_manager.get_ai_generated_response(
+            model, "!shutdown command", ctx.author.display_name, relationship_level
+        )
+        
         await ctx.send(response)
         print(f"Bot shutdown requested by {ctx.author}")
         
@@ -342,14 +408,25 @@ async def shutdown_bot(ctx):
         import sys
         sys.exit(0)
     else:
-        response = persona_manager.get_activity_response("admin", "no_permission")
+        # Generate AI response for no permission
+        response = await persona_manager.get_ai_generated_response(
+            model, "!shutdown command (no permission)", ctx.author.display_name, "stranger"
+        )
         await ctx.send(response)
 
 @bot.command(name='restart', aliases=['reboot'])
 async def restart_bot(ctx):
     """Restart the bot (admin only)"""
     if ctx.author.guild_permissions.administrator:
-        response = persona_manager.get_activity_response("admin", "restart")
+        # Get user relationship for personalized response
+        user_data = social.get_user_relationship(ctx.author.id)
+        relationship_level = user_data['relationship_level']
+        
+        # Generate AI response for restart command
+        response = await persona_manager.get_ai_generated_response(
+            model, "!restart command", ctx.author.display_name, relationship_level
+        )
+        
         await ctx.send(response)
         print(f"Bot restart requested by {ctx.author}")
         
@@ -365,7 +442,10 @@ async def restart_bot(ctx):
         print("Restarting bot...")
         os.execv(sys.executable, ['python'] + sys.argv)
     else:
-        response = persona_manager.get_activity_response("admin", "no_permission")
+        # Generate AI response for no permission
+        response = await persona_manager.get_ai_generated_response(
+            model, "!restart command (no permission)", ctx.author.display_name, "stranger"
+        )
         await ctx.send(response)
 
 @bot.event

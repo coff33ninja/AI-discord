@@ -3,7 +3,6 @@ Persona Manager - Centralized personality system using persona cards
 """
 import json
 import random
-import os
 
 class PersonaManager:
     def __init__(self, persona_file="persona_card.json"):
@@ -35,15 +34,43 @@ class PersonaManager:
         return self.persona.get("name", "AI Assistant")
     
     def get_ai_prompt(self, user_question, relationship_level="stranger"):
-        """Generate AI system prompt with persona and relationship context"""
-        base_prompt = self.persona.get("ai_system_prompt", "You are a helpful AI assistant.")
+        """Generate AI system prompt with full persona card context"""
+        # Pass the entire persona card to the AI
+        persona_json = json.dumps(self.persona, indent=2)
         
-        # Add relationship context
-        relationship_context = ""
-        if relationship_level in self.persona.get("relationship_responses", {}):
-            relationship_context = f"\n\nRelationship context: The user is a {relationship_level}. Adjust your tsundere responses accordingly - be more caring (but still defensive) with closer relationships."
+        prompt = f"""You are an AI that must understand and embody the personality described in this persona card:
+
+PERSONA CARD:
+{persona_json}
+
+INSTRUCTIONS:
+1. Read and understand your complete personality from the persona card above
+2. You ARE the character described - embody them completely in your responses
+3. Your relationship with this user is: {relationship_level}
+4. Respond naturally as this character would, using their speech patterns and personality traits
+
+USER QUESTION: {user_question}
+
+Generate an authentic response as the character described in the persona card."""
         
-        return f"{base_prompt}{relationship_context}\n\nUser question: {user_question}\n\nRespond in character:"
+        return prompt
+    
+    def get_ai_response_prompt(self, user_action, user_name, relationship_level="stranger"):
+        """Generate AI prompt based on persona card and user action"""
+        # Pass the persona card to AI so it can embody the personality
+        persona_json = json.dumps(self.persona, indent=2)
+        
+        prompt = f"""PERSONA CARD:
+{persona_json}
+
+You ARE the character described above. Embody this personality completely.
+
+USER ACTION: {user_name} just used: {user_action}
+RELATIONSHIP LEVEL: {relationship_level}
+
+Based on your personality and what the user did, generate ONE authentic response. Stay in character."""
+        
+        return prompt
     
     def get_response(self, response_type, **kwargs):
         """Get a random response of the specified type"""
@@ -58,6 +85,30 @@ class PersonaManager:
             return response.format(**kwargs)
         except KeyError:
             return response
+    
+    async def get_ai_generated_response(self, model, user_action, user_name, relationship_level="stranger"):
+        """Generate a response using AI based on persona and user action"""
+        import asyncio
+        import concurrent.futures
+        
+        try:
+            prompt = self.get_ai_response_prompt(user_action, user_name, relationship_level)
+            
+            # Generate response using Gemini with timeout protection
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                try:
+                    response = await asyncio.wait_for(
+                        loop.run_in_executor(executor, model.generate_content, prompt),
+                        timeout=15.0  # 15 second timeout for quick responses
+                    )
+                    return response.text.strip()
+                except asyncio.TimeoutError:
+                    # Fallback to template response if AI times out
+                    return self.get_response("error")
+        except Exception:
+            # Fallback to template response if AI fails
+            return self.get_response("error")
     
     def get_relationship_response(self, relationship_level, response_type, **kwargs):
         """Get relationship-specific response"""
