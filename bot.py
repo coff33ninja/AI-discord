@@ -334,7 +334,16 @@ async def shutdown_bot(ctx):
         response = admin_config.get("shutdown", "Ugh, fine! I'm shutting down... It's not like I'll miss you or anything, baka!")
         await ctx.send(response)
         print(f"Bot shutdown requested by {ctx.author}")
+        
+        # Save any pending data
+        social.save_user_data()
+        
+        # Close bot connection and exit
         await bot.close()
+        
+        # Force exit the script
+        import sys
+        sys.exit(0)
     else:
         admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
         response = admin_config.get("no_permission", "No permission!")
@@ -352,12 +361,13 @@ async def restart_bot(ctx):
         # Save any pending data
         social.save_user_data()
         
-        # Close and restart
+        # Close bot connection
         await bot.close()
         
-        # Note: This requires the bot to be run in a loop or with auto-restart
+        # Restart the script
         import os
         import sys
+        print("Restarting bot...")
         os.execv(sys.executable, ['python'] + sys.argv)
     else:
         admin_config = persona_manager.persona.get("activity_responses", {}).get("admin", {})
@@ -389,4 +399,32 @@ async def on_command_error(ctx, error):
             pass  # If we can't send the error message, fail silently
 
 if __name__ == '__main__':
-    bot.run(os.getenv('DISCORD_TOKEN'))
+    import signal
+    import sys
+    
+    def signal_handler(sig, frame):
+        """Handle Ctrl+C gracefully"""
+        print('\n🛑 Shutdown signal received...')
+        # Save any pending data
+        if 'social' in globals():
+            social.save_user_data()
+        print('👋 Coffee is shutting down... Goodbye!')
+        sys.exit(0)
+    
+    # Register signal handler for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    try:
+        bot.run(os.getenv('DISCORD_TOKEN'))
+    except KeyboardInterrupt:
+        print('\n🛑 Bot interrupted by user')
+        # Save any pending data
+        if 'social' in globals():
+            social.save_user_data()
+        print('👋 Coffee is shutting down... Goodbye!')
+    except Exception as e:
+        print(f'❌ Bot crashed: {e}')
+        # Save any pending data
+        if 'social' in globals():
+            social.save_user_data()
+        raise

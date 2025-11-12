@@ -64,3 +64,6 @@ logs/
 
 # Zip files (as requested)
 *.zip
+
+# Test files
+test_*.py
