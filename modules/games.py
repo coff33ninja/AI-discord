@@ -716,9 +716,18 @@ class TsundereGames:
                             user_name = user.name if hasattr(user, 'name') else str(user_id)
                             winners.append(f"**{user_name}** ({elapsed_time:.1f}s)")
                         await ctx.send(f"🏆 Correct answers: {', '.join(winners)}")
+                    
+                        # Show all valid answer variants
+                        if len(valid_answers) > 1:
+                            answers_display = ", ".join([f"**{v}**" for v in valid_answers])
+                            await ctx.send(f"💡 Additional acceptable answers: {answers_display}")
                 else:
                     # No correct answers
-                    await ctx.send(f"⏰ Time's up! No one got it right. The answer was **{correct_answer}**!")
+                        await ctx.send(f"⏰ Time's up! No one got it right. The answer was **{correct_answer}**!")
+                        # Show all valid answer variants even when no one got it right
+                        if len(valid_answers) > 1:
+                            answers_display = ", ".join([f"**{v}**" for v in valid_answers])
+                            await ctx.send(f"💡 Other acceptable answers: {answers_display}")
 
                 # Announce a few incorrect answers
                 if incorrect_users and len(correct_users) > 0:  # Only show wrong answers if someone got it right
