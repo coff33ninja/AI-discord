@@ -9,6 +9,40 @@ echo - Use !restart in Discord to restart remotely
 echo - Close this window to force stop
 echo.
 
+REM Check for .venv folder first
+if exist ".venv\Scripts\activate.bat" (
+    echo Activating virtual environment: .venv
+    call .venv\Scripts\activate.bat
+    goto run
+)
+
+REM Check for venv folder
+if exist "venv\Scripts\activate.bat" (
+    echo Activating virtual environment: venv
+    call venv\Scripts\activate.bat
+    goto run
+)
+
+REM Check for .env folder
+if exist ".env\Scripts\activate.bat" (
+    echo Activating virtual environment: .env
+    call .env\Scripts\activate.bat
+    goto run
+)
+
+REM Check for env folder
+if exist "env\Scripts\activate.bat" (
+    echo Activating virtual environment: env
+    call env\Scripts\activate.bat
+    goto run
+)
+
+REM If no venv found, warn user and continue with system python
+echo Warning: No virtual environment found (.venv, venv, .env, or env)
+echo Using system Python instead
+echo.
+
+:run
 :start
 python bot.py
 set exit_code=%ERRORLEVEL%
