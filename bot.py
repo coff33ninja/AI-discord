@@ -171,6 +171,10 @@ async def ask_gemini(ctx, *, question):
                     channel_id=str(ctx.channel.id)
                 )
                 logger.info(f"Retrieved {len(conversation_history)} previous conversations for context")
+                if conversation_history:
+                    print(f"🧠 Memory: Found {len(conversation_history)} previous conversations")
+                else:
+                    print("🧠 Memory: No previous conversations found")
             except Exception as e:
                 logger.warning(f"Failed to retrieve conversation history: {e}")
                 conversation_history = []
@@ -328,15 +332,17 @@ def create_memory_enhanced_prompt(question, username, conversation_history):
         return base_prompt
     
     # Add conversation context
-    context_text = f"\n\nConversation history with {username}:\n"
+    context_text = f"\n\nRECENT CONVERSATION HISTORY with {username}:\n"
     for conv in conversation_history[-3:]:  # Last 3 conversations for context
-        context_text += f"User: {conv['message_content'][:150]}\n"
+        context_text += f"User ({username}): {conv['message_content'][:150]}\n"
         context_text += f"You: {conv['ai_response'][:150]}\n\n"
     
-    # Insert context into the base prompt
+    context_text += "IMPORTANT: Remember this conversation history and maintain continuity. You know this user from previous interactions.\n"
+    
+    # Insert context into the base prompt before the user question
     enhanced_prompt = base_prompt.replace(
-        f'The user asked: "{question}"',
-        f'The user {username} asked: "{question}"{context_text}Remember our previous conversations and maintain continuity.'
+        f'USER QUESTION: {question}',
+        f'{context_text}\nUSER QUESTION: {question}'
     )
     
     return enhanced_prompt
