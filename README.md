@@ -148,6 +148,9 @@ python dev_bot.py
 | `!joke` | Random jokes (learns your humor!) | `!joke` |
 | `!catfact` | Cat facts (she loves these) | `!catfact` |
 | `!stats` | 🆕 Your personal usage statistics | `!stats` |
+| `!factadd <key> | <fact>` | Add a fact to the bot's knowledge base (saves under `facts`) | `!factadd gravity | Gravity causes objects to attract.` |
+| `!followup <question> | <answer>` | Save a Q/A pair for reuse (stored under `followup`) | `!followup What is AI? | AI is a field of computer science...` |
+| `!follow <question>` | Retrieve a stored follow-up or ask the AI and save the answer if none exists | `!follow What is the capital of France?` |
 
 ### 🎮 **Games**
 | Command | Description | Example |
@@ -254,21 +257,23 @@ AI-discord/
 ├── README.md                 # This file
 ├── data/                     # 🆕 Database storage directory
 │   └── ai_database.db       # 🆕 SQLite database (auto-created)
-└── modules/
-    ├── __init__.py          # Module initialization
-    ├── persona_manager.py   # Centralized personality system
-    ├── personality.py       # Tsundere personality responses
-    ├── api_manager.py       # Gemini API key rotation system
-    ├── search.py            # DuckDuckGo search integration
-    ├── utilities.py         # 🆕 Memory-aware API utilities
-    ├── games.py            # Interactive games
-    ├── social.py           # Relationship tracking system
-    ├── server_actions.py   # Server management commands
-    ├── ai_database.py      # 🆕 Async SQLite database for AI data
-    ├── time_utilities.py   # 🆕 Reminders and time-based features
-    ├── config_manager.py   # Configuration management
-    ├── response_handler.py # Response formatting utilities
-    └── logger.py           # Logging system
+ └── modules/
+      ├── __init__.py            # Module initialization
+      ├── ai_database.py         # Async SQLite database for AI data
+      ├── api_manager.py         # Gemini API key rotation & request manager
+      ├── bot_name_service.py    # Dynamic bot name loader + persona card helper
+      ├── config_manager.py      # Configuration management
+      ├── games.py               # Interactive games (trivia, rps, number guess)
+      ├── knowledge_manager.py   # Thin wrapper around ai_database for reusable knowledge
+      ├── logger.py              # Logging system
+      ├── persona_manager.py     # Centralized personality system (persona card)
+      ├── personality.py         # Tsundere personality responses & templates
+      ├── response_handler.py    # Response formatting utilities (embeds, messages)
+      ├── search.py              # DuckDuckGo search integration + AI analysis
+      ├── server_actions.py      # Server management commands (roles, channels, kick)
+      ├── social.py              # Relationship tracking system & interaction metrics
+      ├── time_utilities.py      # Reminders and time-based features (scheduling)
+      └── utilities.py           # Helper utilities (facts, jokes, weather, memory-aware)
 ```
 
 ## 💝 Relationship System
