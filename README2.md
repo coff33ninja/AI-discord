@@ -75,6 +75,39 @@ Everything is documented in `/docs/`:
 
 **[📋 Full Commands List](./docs/commands.md)**
 
+### 💬 Example Interactions
+
+```
+User: !ai What's 2+2?
+Bot: Ugh, seriously? It's 4, you baka! Don't ask me such obvious questions!
+
+User: !remind in 30 minutes to check the oven
+Bot: Ugh, fine! I'll remind you about 'check the oven' in 30 minutes. 
+     Don't blame me if you forget anyway, baka!
+
+User: !mood
+Bot: I'm... I'm perfectly fine! It's not like I care about your opinion or anything!
+
+User: !stats
+Bot: 📊 Your Chat Statistics:
+     **Total Conversations:** 47
+     **Days Active:** 3
+     **Average per Day:** 15.7
+```
+
+## 🔑 Required API Keys
+
+1. **Discord Bot Token** - [Get from Discord Developer Portal](https://discord.com/developers/applications)
+2. **Google Gemini API Key** - [Get from Google AI Studio](https://makersuite.google.com/app/apikey)
+3. **OpenWeatherMap API Key** *(optional for real weather)* - [Sign up here](https://openweathermap.org/api)
+
+Add to `.env`:
+```env
+DISCORD_BOT_TOKEN=your_token
+GEMINI_API_KEY=your_key
+OPENWEATHER_API_KEY=your_key  # optional
+```
+
 ## 🎨 Customization
 
 Customize the bot's personality in `persona_card.json`:
@@ -130,7 +163,25 @@ run_bot.bat
 dev_bot.bat
 ```
 
-**Stop with:** `Ctrl+C` or `!shutdown` command
+**Stop with:** `Ctrl+C` or `!shutdown` command (admin only)
+
+**Development Tips:**
+- Use `dev_bot.py` for auto-restart on file changes
+- Use `!reload_persona` to reload personality changes without restarting
+- Use `!api_status` to monitor API key health and usage
+- Check terminal logs for debugging information
+
+## ✅ Bot Permissions
+
+Ensure your bot has these Discord permissions:
+- ✅ Send Messages
+- ✅ Read Message History  
+- ✅ Embed Links
+- ✅ Attach Files
+- ✅ Use External Emojis
+- ✅ Manage Roles *(for server actions)*
+- ✅ Manage Channels *(for server actions)*
+- ✅ Kick Members *(for moderation)*
 
 ## 🐛 Troubleshooting
 
