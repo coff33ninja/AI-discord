@@ -67,3 +67,6 @@ logs/
 
 # Test files
 test_*.py
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
