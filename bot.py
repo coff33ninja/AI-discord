@@ -118,8 +118,13 @@ async def on_ready():
     logger.info(f"API manager initialized: {status['total_keys']} keys, current key #{status['current_key']}")
     print(f"🔑 Using {status['total_keys']} API key(s), currently on key #{status['current_key']}")
     
-    # Set tsundere status
-    status_text = persona_manager.persona.get("activity_responses", {}).get("bot_status", "It's not like I want to help! | !help_ai")
+    # Set bot status with fallback
+    try:
+        status_text = persona_manager.persona.get("activity_responses", {}).get("bot_status", "Ready to help! | Use !help_ai for commands")
+    except Exception:
+        # Fallback if persona manager fails
+        status_text = "Ready to help! | Use !help_ai for commands"
+    
     await bot.change_presence(activity=discord.Game(name=status_text))
 
 async def should_search_web(question):
@@ -377,7 +382,18 @@ async def help_command(ctx):
     """Show bot help"""
     logger.info(f"Help command called by user {ctx.author.id}")
     
-    help_config = persona_manager.persona.get("activity_responses", {}).get("help_command", {})
+    # Get help command configuration with fallbacks
+    try:
+        help_config = persona_manager.persona.get("activity_responses", {}).get("help_command", {})
+    except Exception:
+        help_config = {}
+    
+    # Ensure we have fallback values for all help config fields
+    help_config = {
+        "title": help_config.get("title", "Available Commands"),
+        "description": help_config.get("description", "Here are the commands I can help you with:"),
+        "footer": help_config.get("footer", "Use these commands to interact with me!")
+    }
     
     # Use ResponseHandler to create a formatted embed
     embed = ResponseHandler.create_info_embed(
@@ -558,7 +574,10 @@ async def check_relationship(ctx):
     else:
         # Fallback to persona card response with relationship info
         logger.warning("AI response failed, using fallback for relationship command")
-        fallback = persona_manager.get_relationship_response(relationship_level, "greeting")
+        try:
+            fallback = persona_manager.get_relationship_response(relationship_level, "greeting")
+        except Exception:
+            fallback = "Hello! How can I help you today?"
         await ctx.send(f"{fallback} (Interactions: {interactions}, Level: {relationship_level})")
 
 # Utility Commands
@@ -1037,7 +1056,10 @@ async def reload_persona(ctx):
         else:
             # Fallback to persona card response
             logger.warning("AI response failed for reload_persona, using fallback")
-            fallback = persona_manager.get_activity_response("admin", "reload_success", result=result)
+            try:
+                fallback = persona_manager.get_activity_response("admin", "reload_success", result=result)
+            except Exception:
+                fallback = f"Configuration reloaded successfully: {result}"
             await ctx.send(fallback)
     else:
         logger.warning(f"Non-admin user {ctx.author.id} attempted reload_persona command")
@@ -1051,7 +1073,10 @@ async def reload_persona(ctx):
             await ctx.send(response)
         else:
             # Fallback to persona card response
-            fallback = persona_manager.get_activity_response("admin", "no_permission")
+            try:
+                fallback = persona_manager.get_activity_response("admin", "no_permission")
+            except Exception:
+                fallback = "You don't have permission to use that command."
             await ctx.send(fallback)
 
 @bot.command(name='shutdown', aliases=['kill', 'stop'])
@@ -1076,11 +1101,14 @@ async def shutdown_bot(ctx):
             await ctx.send(response)
         else:
             # Fallback to persona card response
-            shutdown_responses = persona_manager.get_activity_response("admin", "shutdown")
-            if isinstance(shutdown_responses, list):
-                fallback = random.choice(shutdown_responses)
-            else:
-                fallback = shutdown_responses
+            try:
+                shutdown_responses = persona_manager.get_activity_response("admin", "shutdown")
+                if isinstance(shutdown_responses, list):
+                    fallback = random.choice(shutdown_responses)
+                else:
+                    fallback = shutdown_responses
+            except Exception:
+                fallback = "Shutting down now. Goodbye!"
             await ctx.send(fallback)
         print(f"Bot shutdown requested by {ctx.author}")
         
@@ -1123,7 +1151,10 @@ async def shutdown_bot(ctx):
             await ctx.send(response)
         else:
             # Fallback to persona card response
-            fallback = persona_manager.get_activity_response("admin", "no_permission")
+            try:
+                fallback = persona_manager.get_activity_response("admin", "no_permission")
+            except Exception:
+                fallback = "You don't have permission to use that command."
             await ctx.send(fallback)
 
 @bot.command(name='restart', aliases=['reboot'])
@@ -1148,11 +1179,14 @@ async def restart_bot(ctx):
         else:
             # Fallback to persona card response
             logger.warning("AI response failed for restart, using fallback")
-            restart_responses = persona_manager.get_activity_response("admin", "restart")
-            if isinstance(restart_responses, list):
-                fallback = random.choice(restart_responses)
-            else:
-                fallback = restart_responses
+            try:
+                restart_responses = persona_manager.get_activity_response("admin", "restart")
+                if isinstance(restart_responses, list):
+                    fallback = random.choice(restart_responses)
+                else:
+                    fallback = restart_responses
+            except Exception:
+                fallback = "Restarting the system now. I'll be back shortly!"
             await ctx.send(fallback)
         
         print(f"Bot restart requested by {ctx.author}")
@@ -1198,7 +1232,10 @@ async def restart_bot(ctx):
             await ctx.send(response_text)
         else:
             # Fallback to persona card response
-            fallback = persona_manager.get_activity_response("admin", "no_permission")
+            try:
+                fallback = persona_manager.get_activity_response("admin", "no_permission")
+            except Exception:
+                fallback = "You don't have permission to use that command."
             await ctx.send(fallback)
 
 @bot.command(name='api_status')
@@ -1240,7 +1277,10 @@ async def api_status(ctx):
     else:
         logger.warning(f"Non-admin user {ctx.author.id} attempted api_status command")
         # Fallback to persona card response
-        fallback = persona_manager.get_activity_response("admin", "no_permission")
+        try:
+            fallback = persona_manager.get_activity_response("admin", "no_permission")
+        except Exception:
+            fallback = "You don't have permission to use that command."
         await ctx.send(fallback)
 
 @bot.command(name='memory', aliases=['memory_settings'])
@@ -1346,7 +1386,10 @@ async def ai_analytics(ctx, days: int = 7):
             await ctx.send(f"❌ Error retrieving analytics: {e}")
     else:
         logger.warning(f"Non-admin user {ctx.author.id} attempted ai_analytics command")
-        fallback = persona_manager.get_activity_response("admin", "no_permission")
+        try:
+            fallback = persona_manager.get_activity_response("admin", "no_permission")
+        except Exception:
+            fallback = "You don't have permission to use that command."
         await ctx.send(fallback)
 
 @bot.event
@@ -1366,8 +1409,12 @@ async def on_command_error(ctx, error):
         # Bot doesn't have permissions - try to DM user if possible
         logger.warning(f"Forbidden action, attempting DM to user {ctx.author.id}")
         try:
-            permissions_config = persona_manager.persona.get("activity_responses", {}).get("permissions", {})
-            message = permissions_config.get("no_send_permission", "I don't have permission to send messages!")
+            # Get permission error message with fallback
+            try:
+                permissions_config = persona_manager.persona.get("activity_responses", {}).get("permissions", {})
+                message = permissions_config.get("no_send_permission", "I don't have permission to send messages!")
+            except Exception:
+                message = "I don't have permission to send messages!"
             await ctx.author.send(message)
         except (discord.Forbidden, discord.HTTPException):
             logger.warning(f"Could not DM user {ctx.author.id} about permission error")

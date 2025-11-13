@@ -137,13 +137,20 @@ class TimeBasedUtilities:
                     # Create tsundere reminder message
                     user_mention = f"<@{user_id}>"
                     
-                    # Get persona response for reminder
-                    persona_responses = self.persona_manager.persona.get("activity_responses", {}).get("reminders", {})
-                    reminder_intros = persona_responses.get("reminder_ping", [
-                        "Ugh, {user_mention}! You asked me to remind you about this, baka!",
-                        "Hey {user_mention}! It's not like I wanted to remind you or anything...",
-                        "{user_mention}, you better not ignore this reminder I'm giving you!"
-                    ])
+                    # Get persona response for reminder with fallback
+                    try:
+                        persona_responses = self.persona_manager.persona.get("activity_responses", {}).get("reminders", {})
+                        reminder_intros = persona_responses.get("reminder_ping", [])
+                    except Exception:
+                        reminder_intros = []
+                    
+                    # Fallback reminder intros if none found
+                    if not reminder_intros:
+                        reminder_intros = [
+                            "Hey {user_mention}! Here's your reminder:",
+                            "{user_mention}, you asked me to remind you about this:",
+                            "Reminder for {user_mention}:"
+                        ]
                     
                     import random
                     intro = random.choice(reminder_intros).format(user_mention=user_mention)
