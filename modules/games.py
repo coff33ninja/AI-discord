@@ -44,80 +44,172 @@ class TsundereGames:
     
     async def start_number_guessing(self, user_id, max_number=DEFAULT_GUESSING_MAX, ctx=None):
         """Start a number guessing game with countdown"""
+        # Create a shared number-guessing question so multiple players can join
         secret_number = random.randint(1, max_number)
-        
+        self.question_counter += 1
+        question_id = self.question_counter
+
         self.timer_counter += 1
         timer_id = self.timer_counter
-        
-        self.active_games[user_id] = {
+
+        # Store as an active question (multiplayer)
+        self.active_questions[question_id] = {
             'type': 'number_guess',
             'secret': secret_number,
-            'attempts': 0,
-            'max': max_number,
             'start_time': asyncio.get_event_loop().time(),
+            'answers': {},  # {user_id: {'answer': int, 'time': elapsed_time}}
             'timer_id': timer_id,
-            'ctx': ctx
+            'ctx': ctx,
+            'game_over': False
         }
-        
-        logger.info(f"Number guessing game started for user {user_id} (1-{max_number})")
+
+        # Store user-specific reference to the shared question
+        self.active_games[user_id] = {
+            'type': 'number_guess',
+            'question_id': question_id
+        }
+
+        logger.info(f"Number guessing game started for user {user_id} (1-{max_number}) [QID {question_id}]")
         persona_msg = self._get_persona_response("games", "start")
         start_text = persona_msg or self.persona_manager.get_game_response("number_guess", "start")
-        
+
         # Start countdown if context provided
         if ctx:
-            countdown_task = asyncio.create_task(self._countdown_timer(timer_id, ctx, NUMBER_GUESSING_TIMEOUT, "number guessing"))
+            countdown_task = asyncio.create_task(self._countdown_timer(timer_id, ctx, NUMBER_GUESSING_TIMEOUT, "number_guess", question_id))
             self.active_timers[timer_id] = countdown_task
-        
+
         return f"{start_text} I picked a number between 1 and {max_number}. Try to guess it! You have {NUMBER_GUESSING_TIMEOUT} seconds."
+
+    async def start_rps(self, user_id, timeout=TRIVIA_TIMEOUT, ctx=None):
+        """Start a multiplayer Rock-Paper-Scissors round where players submit choices within the timeout."""
+        self.question_counter += 1
+        question_id = self.question_counter
+
+        self.timer_counter += 1
+        timer_id = self.timer_counter
+
+        self.active_questions[question_id] = {
+            'type': 'rps',
+            'start_time': asyncio.get_event_loop().time(),
+            'choices': {},  # {user_id: {'choice': 'rock', 'time': elapsed}}
+            'timer_id': timer_id,
+            'ctx': ctx,
+            'game_over': False
+        }
+
+        # Store starter mapping
+        self.active_games[user_id] = {'type': 'rps', 'question_id': question_id}
+
+        # Start countdown
+        if ctx:
+            countdown_task = asyncio.create_task(self._countdown_timer(timer_id, ctx, timeout, "rps", question_id))
+            self.active_timers[timer_id] = countdown_task
+
+        persona_msg = self._get_persona_response("games", "rps_start")
+        start_text = persona_msg or "Rock-Paper-Scissors round started! Submit your choice with `!rps <rock|paper|scissors>` or `!answer <choice>`."
+        return start_text
     
     async def guess_number(self, user_id, guess, ctx=None):
-        """Process a number guess"""
-        if user_id not in self.active_games or self.active_games[user_id]['type'] != 'number_guess':
-            logger.info(f"No active number guessing game for user {user_id}")
-            return self._get_persona_response("games", "no_active_game") or self.persona_manager.get_game_response("general", "no_active_game")
-        
-        game = self.active_games[user_id]
-        game['attempts'] += 1
-        secret = game['secret']
-        
-        logger.info(f"User {user_id} guessed {guess}, secret is {secret}, attempts: {game['attempts']}")
-        
-        if guess == secret:
-            attempts = game['attempts']
-            del self.active_games[user_id]
-            logger.info(f"User {user_id} won number guessing game in {attempts} attempts")
-            persona_msg = self._get_persona_response("games", "win")
-            response = f"{persona_msg or self.persona_manager.get_game_response('number_guess', 'win')} It was {secret} in {attempts} tries!"
-            # Announce winner to channel
+        """Collect a number guess for a shared number-guessing game (multiplayer)
+        If the user doesn't have an active game mapping, try to find an open number-guess game in the same channel.
+        """
+        # If user doesn't have mapping, try to find a shared question in this channel
+        if user_id not in self.active_games or self.active_games[user_id].get('type') != 'number_guess':
+            # Try to find an open number_guess question in the same channel
             if ctx:
-                user_name = None
+                found_qid = None
+                for qid, qdata in self.active_questions.items():
+                    if qdata.get('type') == 'number_guess' and qdata.get('ctx') and qdata.get('ctx').channel.id == ctx.channel.id and not qdata.get('game_over'):
+                        found_qid = qid
+                        break
+                if found_qid:
+                    self.active_games[user_id] = {'type': 'number_guess', 'question_id': found_qid}
+                else:
+                    logger.info(f"No active number guessing game for user {user_id}")
+                    return self._get_persona_response("games", "no_active_game") or self.persona_manager.get_game_response("general", "no_active_game")
+            else:
+                logger.info(f"No active number guessing game for user {user_id} and no context to search")
+                return self._get_persona_response("games", "no_active_game") or self.persona_manager.get_game_response("general", "no_active_game")
+
+        # Now we have an active_games mapping pointing to the shared question
+        question_id = self.active_games[user_id]['question_id']
+        if question_id not in self.active_questions:
+            logger.info(f"Question {question_id} not found for user {user_id}")
+            del self.active_games[user_id]
+            return "The guessing game expired. Start a new one with !startgame number"
+
+        question_data = self.active_questions[question_id]
+        elapsed_time = asyncio.get_event_loop().time() - question_data['start_time']
+
+        # Prevent double guesses
+        if user_id in question_data.get('answers', {}):
+            return "You already submitted a guess for this round!"
+
+        # Store guess
+        try:
+            guess_val = int(guess)
+        except Exception:
+            return "Please submit a valid integer guess."
+
+        question_data['answers'][user_id] = {'answer': guess_val, 'time': elapsed_time}
+        del self.active_games[user_id]
+
+        # Acknowledge
+        user_name = None
+        if ctx:
+            try:
+                user = await ctx.bot.fetch_user(user_id)
+                user_name = user.name if hasattr(user, 'name') else str(user_id)
+            except Exception:
+                user_name = str(user_id)
+        if ctx and user_name:
+            await ctx.send(f"📝 **{user_name}** submitted a guess!")
+        return "Guess received! Waiting for the round to finish."
+    
+    async def rock_paper_scissors(self, user_choice, user_id=None, ctx=None):
+        """Play rock paper scissors"""
+        choices = ['rock', 'paper', 'scissors']
+        user_choice = user_choice.lower() if isinstance(user_choice, str) else None
+
+        # If there's an active multiplayer RPS round in this channel, collect the player's choice
+        if ctx:
+            # Find open rps question in this channel
+            found_qid = None
+            for qid, qdata in self.active_questions.items():
+                if qdata.get('type') == 'rps' and qdata.get('ctx') and qdata.get('ctx').channel.id == ctx.channel.id and not qdata.get('game_over'):
+                    found_qid = qid
+                    break
+            if found_qid:
+                qdata = self.active_questions[found_qid]
+                elapsed = asyncio.get_event_loop().time() - qdata.get('start_time', asyncio.get_event_loop().time())
+                if user_choice not in choices:
+                    return self.persona_manager.get_validation_response("rps_choice")
+                # Prevent double submissions
+                if user_id in qdata.get('choices', {}):
+                    return "You already submitted a choice for this round!"
+                qdata.setdefault('choices', {})[user_id] = {'choice': user_choice, 'time': elapsed}
+                # create temporary mapping so generic answer flow stays consistent
+                if user_id in self.active_games:
+                    try:
+                        del self.active_games[user_id]
+                    except Exception:
+                        pass
+                # Acknowledge
                 try:
                     user = await ctx.bot.fetch_user(user_id)
                     user_name = user.name if hasattr(user, 'name') else str(user_id)
                 except Exception:
                     user_name = str(user_id)
-                if user_name:
-                    await ctx.send(f"🏆 **{user_name}** guessed the number correctly ({secret}) in {attempts} attempts!")
-            return response
-        elif guess < secret:
-            persona_msg = self._get_persona_response("games", "hint_low")
-            return persona_msg or self.persona_manager.get_game_response("number_guess", "hint_low")
-        else:
-            persona_msg = self._get_persona_response("games", "hint_high")
-            return persona_msg or self.persona_manager.get_game_response("number_guess", "hint_high")
-    
-    async def rock_paper_scissors(self, user_choice, user_id=None, ctx=None):
-        """Play rock paper scissors"""
-        choices = ['rock', 'paper', 'scissors']
+                await ctx.send(f"📝 **{user_name}** submitted their R/P/S choice!")
+                return "Choice received! Waiting for the round to finish."
+
+        # No active multiplayer round found — fall back to immediate bot duel
         bot_choice = random.choice(choices)
-        user_choice = user_choice.lower()
-        
-        logger.info(f"Rock-paper-scissors: user chose {user_choice}, bot chose {bot_choice}")
-        
-        if user_choice not in choices:
+        if not user_choice or user_choice not in choices:
             logger.warning(f"Invalid choice in rock-paper-scissors: {user_choice}")
             return self.persona_manager.get_validation_response("rps_choice")
-        
+
+        logger.info(f"Rock-paper-scissors: user chose {user_choice}, bot chose {bot_choice}")
         # Get username for announcement
         user_name = None
         if ctx and user_id:
@@ -126,7 +218,7 @@ class TsundereGames:
                 user_name = user.name if hasattr(user, 'name') else str(user_id)
             except Exception:
                 user_name = str(user_id)
-        
+
         if user_choice == bot_choice:
             persona_msg = self._get_persona_response("games", "tie", choice=bot_choice)
             response = persona_msg or self.persona_manager.get_game_response("rps", "tie", choice=bot_choice)
@@ -193,6 +285,7 @@ class TsundereGames:
         
         # Store the shared question data
         self.active_questions[question_id] = {
+            'type': 'trivia',
             'question': question_data['q'],
             'answer': question_data['a'],
             'start_time': asyncio.get_event_loop().time(),
@@ -261,10 +354,25 @@ class TsundereGames:
     
     async def answer_trivia(self, user_id, answer, ctx=None):
         """Collect trivia answer - stores it for later tallying when timer completes"""
-        if user_id not in self.active_games or self.active_games[user_id]['type'] != 'trivia':
-            logger.info(f"No active trivia game for user {user_id}")
-            persona_msg = self._get_persona_response("games", "no_active_game")
-            return f"{persona_msg or self.persona_manager.get_game_response('trivia', 'no_active_game')} Start one with !trivia"
+        # If user doesn't have mapping, try to find an open trivia question in the same channel
+        if user_id not in self.active_games or self.active_games[user_id].get('type') != 'trivia':
+            if ctx:
+                found_qid = None
+                for qid, qdata in self.active_questions.items():
+                    if qdata.get('type') == 'trivia' and qdata.get('ctx') and qdata.get('ctx').channel.id == ctx.channel.id and not qdata.get('game_over'):
+                        found_qid = qid
+                        break
+                if found_qid:
+                    # create a temporary mapping so the rest of the logic can proceed
+                    self.active_games[user_id] = {'type': 'trivia', 'question_id': found_qid}
+                else:
+                    logger.info(f"No active trivia game for user {user_id}")
+                    persona_msg = self._get_persona_response("games", "no_active_game")
+                    return f"{persona_msg or self.persona_manager.get_game_response('trivia', 'no_active_game')} Start one with !trivia"
+            else:
+                logger.info(f"No active trivia game for user {user_id} and no context to search")
+                persona_msg = self._get_persona_response("games", "no_active_game")
+                return f"{persona_msg or self.persona_manager.get_game_response('trivia', 'no_active_game')} Start one with !trivia"
         
         question_id = self.active_games[user_id]['question_id']
         
@@ -316,37 +424,42 @@ class TsundereGames:
         return response
         
     
-        async def _tally_game_results(self, question_id, ctx, game_name):
-            """Tally results for all players who answered - called when timer completes"""
-            if question_id not in self.active_questions:
-                logger.warning(f"Question {question_id} not found for tallying")
-                return
-        
-            question_data = self.active_questions[question_id]
-            correct_answer = question_data['answer']
-            answers = question_data['answers']
-        
-            if not answers:
-                # No one answered
-                if ctx:
+    async def _tally_game_results(self, question_id, ctx, game_name):
+        """Tally results for all players who answered - called when timer completes"""
+        if question_id not in self.active_questions:
+            logger.warning(f"Question {question_id} not found for tallying")
+            return
+
+        question_data = self.active_questions[question_id]
+        qtype = question_data.get('type', 'trivia')
+        answers = question_data.get('answers', {})
+
+        if not answers:
+            # No one answered
+            if ctx:
+                if qtype == 'trivia':
+                    correct_answer = question_data.get('answer')
                     await ctx.send(f"⏰ Time's up! No one answered. The answer was **{correct_answer}**!")
-                logger.info(f"No answers submitted for question {question_id}")
-                del self.active_questions[question_id]
-                return
-        
+                else:
+                    await ctx.send(f"⏰ Time's up! No one participated in the {qtype} round.")
+            logger.info(f"No answers submitted for question {question_id}")
+            del self.active_questions[question_id]
+            return
+
+        if qtype == 'trivia':
+            correct_answer = question_data.get('answer')
             # Separate correct and incorrect answers, sorted by time
             correct_users = []
             incorrect_users = []
-        
             for user_id, answer_data in answers.items():
-                if answer_data['answer'].lower().strip() == correct_answer:
+                if str(answer_data['answer']).lower().strip() == str(correct_answer).lower().strip():
                     correct_users.append((user_id, answer_data['time']))
                 else:
                     incorrect_users.append((user_id, answer_data['answer'], answer_data['time']))
-        
+
             # Sort by time (fastest first)
             correct_users.sort(key=lambda x: x[1])
-        
+
             # Announce results
             if ctx:
                 # Announce correct answers
@@ -355,7 +468,6 @@ class TsundereGames:
                         user_id, elapsed_time = correct_users[0]
                         user = await ctx.bot.fetch_user(user_id)
                         user_name = user.name if hasattr(user, 'name') else str(user_id)
-                    
                         if elapsed_time < TRIVIA_FAST_THRESHOLD:
                             await ctx.send(f"🎉 **{user_name}** got it right in {elapsed_time:.1f} seconds! That's lightning fast!")
                         else:
@@ -371,7 +483,7 @@ class TsundereGames:
                 else:
                     # No correct answers
                     await ctx.send(f"⏰ Time's up! No one got it right. The answer was **{correct_answer}**!")
-            
+
                 # Announce a few incorrect answers
                 if incorrect_users and len(correct_users) > 0:  # Only show wrong answers if someone got it right
                     incorrect_users.sort(key=lambda x: x[2])  # Sort by time
@@ -383,16 +495,116 @@ class TsundereGames:
                         wrong_answers.append(f"**{user_name}**: '{answer}'")
                     if wrong_answers:
                         await ctx.send(f"❌ Some close tries: {', '.join(wrong_answers)}")
-        
+
             logger.info(f"Trivia results for question {question_id}: {len(correct_users)} correct, {len(incorrect_users)} incorrect")
             del self.active_questions[question_id]
+            return
+
+        if qtype == 'number_guess':
+            secret = question_data.get('secret')
+            # answers: {user_id: {'answer': int, 'time': float}}
+            exact_matches = []
+            all_guesses = []
+            for user_id, data in answers.items():
+                try:
+                    val = int(data['answer'])
+                except Exception:
+                    continue
+                all_guesses.append((user_id, val, data.get('time', 0)))
+                if val == secret:
+                    exact_matches.append((user_id, data.get('time', 0)))
+
+            if exact_matches:
+                # Sort by time and announce winners
+                exact_matches.sort(key=lambda x: x[1])
+                if ctx:
+                    if len(exact_matches) == 1:
+                        user_id, elapsed = exact_matches[0]
+                        user = await ctx.bot.fetch_user(user_id)
+                        user_name = user.name if hasattr(user, 'name') else str(user_id)
+                        await ctx.send(f"🏆 **{user_name}** guessed the number {secret} in {elapsed:.1f} seconds!")
+                    else:
+                        winners = []
+                        for user_id, elapsed in exact_matches:
+                            user = await ctx.bot.fetch_user(user_id)
+                            user_name = user.name if hasattr(user, 'name') else str(user_id)
+                            winners.append(f"**{user_name}** ({elapsed:.1f}s)")
+                        await ctx.send(f"🏆 Multiple winners: {', '.join(winners)} guessed {secret}!")
+                logger.info(f"Number guess winners for question {question_id}: {len(exact_matches)} exact matches")
+                del self.active_questions[question_id]
+                return
+
+            # No exact matches: find closest guesses
+            if not all_guesses:
+                if ctx:
+                    await ctx.send("⏰ Time's up! No valid guesses submitted.")
+                del self.active_questions[question_id]
+                return
+
+            # Compute minimal distance
+            diffs = []
+            for user_id, val, t in all_guesses:
+                diffs.append((user_id, abs(val - secret), val, t))
+            diffs.sort(key=lambda x: (x[1], x[3]))  # sort by distance then time
+            best_diff = diffs[0][1]
+            winners = [d for d in diffs if d[1] == best_diff]
+            if ctx:
+                if len(winners) == 1:
+                    user_id, diff, val, t = winners[0]
+                    user = await ctx.bot.fetch_user(user_id)
+                    user_name = user.name if hasattr(user, 'name') else str(user_id)
+                    await ctx.send(f"🥈 Closest guess: **{user_name}** guessed {val} (off by {diff})")
+                else:
+                    parts = []
+                    for user_id, diff, val, t in winners:
+                        user = await ctx.bot.fetch_user(user_id)
+                        user_name = user.name if hasattr(user, 'name') else str(user_id)
+                        parts.append(f"**{user_name}** guessed {val} (off by {diff})")
+                    await ctx.send(f"🥈 Closest guesses: {', '.join(parts)}")
+                # Optionally show sample guesses
+                sample = diffs[:3]
+                sample_parts = []
+                for user_id, diff, val, t in sample:
+                    user = await ctx.bot.fetch_user(user_id)
+                    user_name = user.name if hasattr(user, 'name') else str(user_id)
+                    sample_parts.append(f"**{user_name}**: {val}")
+                if sample_parts:
+                    await ctx.send(f"🔍 Sample guesses: {', '.join(sample_parts)}. The secret was **{secret}**.")
+
+            logger.info(f"Number guess results for question {question_id}: winners {len(winners)}, total {len(all_guesses)}")
+            del self.active_questions[question_id]
+            return
+
+        # Fallback: remove question
+        del self.active_questions[question_id]
     
     async def answer(self, user_id, answer, ctx=None):
         """Generic answer handler for all game types - routes to appropriate game handler"""
+        # If user doesn't have an active mapping, try to find an open question in this channel
         if user_id not in self.active_games:
+            if ctx:
+                found = None
+                for qid, qdata in self.active_questions.items():
+                    if qdata.get('ctx') and qdata.get('ctx').channel.id == ctx.channel.id and not qdata.get('game_over'):
+                        found = (qid, qdata)
+                        break
+                if found:
+                    qid, qdata = found
+                    qtype = qdata.get('type')
+                    logger.info(f"Generic answer router found open question {qid} of type {qtype} in channel {ctx.channel.id}")
+                    if qtype == 'trivia':
+                        return await self.answer_trivia(user_id, answer, ctx)
+                    elif qtype == 'number_guess':
+                        try:
+                            guess = int(answer)
+                            return await self.guess_number(user_id, guess, ctx)
+                        except ValueError:
+                            return "That's not a valid number! Try again with a whole number."
+                    else:
+                        return f"Unknown open game type: {qtype}"
             logger.info(f"No active game for user {user_id}")
             return "You don't have an active game! Start one with !trivia, !guess, or !8ball"
-        
+
         game_type = self.active_games[user_id].get('type')
         logger.info(f"Generic answer handler: user {user_id}, game type: {game_type}, answer: {answer[:50]}")
         
