@@ -113,6 +113,101 @@ class TsundereGames:
         except (KeyError, TypeError, ValueError) as e:
             print(f"⚠️ Error retrieving persona response: {e}")
         return None
+
+    async def _fetch_additional_facts(self, term: str, max_facts: int = 3) -> list:
+        """Attempt to fetch short additional facts about `term`.
+
+        Strategy:
+        - If `ai_db` is available, search the knowledge base for matching entries and
+          return their content (trimmed to short sentences).
+        - Otherwise, if `api_manager` is available, ask the AI to produce 2-3 concise
+          facts and parse the response.
+        - Returns a list of short fact strings (may be empty).
+        """
+        facts = []
+        if not term:
+            return facts
+
+        term_clean = str(term).strip()
+
+        # 1) Try DB search for related knowledge
+        try:
+            if self.ai_db:
+                try:
+                    results = await self.ai_db.search_knowledge(term_clean, limit=max_facts)
+                except Exception:
+                    results = []
+
+                for r in results:
+                    content = r.get('content') or ''
+                    # Take the first sentence to keep facts short
+                    first_sentence = re.split(r'[\.\n]', content.strip())[0].strip()
+                    if first_sentence:
+                        facts.append(first_sentence)
+                    if len(facts) >= max_facts:
+                        break
+                if facts:
+                    return facts
+        except Exception:
+            # DB search failed; fall through to AI
+            pass
+
+        # 2) Fall back to AI-generated facts
+        try:
+            if self.api_manager:
+                prompt = (
+                    f"Provide {max_facts} concise, single-line trivia facts about '{term_clean}'. "
+                    "Return only a JSON array named 'facts' when possible, or plain newline-separated lines. "
+                    "Keep each fact short (one sentence, ~10-20 words)."
+                )
+                ai_resp = await self.api_manager.generate_content(prompt)
+                # Try to parse JSON array
+                parsed = None
+                try:
+                    m = re.search(r"\{.*\}\s*$", ai_resp, flags=re.S)
+                    if m:
+                        # attempt to find array inside
+                        arr_match = re.search(r"\[.*\]", m.group(0), flags=re.S)
+                        if arr_match:
+                            parsed = json.loads(arr_match.group(0))
+                        else:
+                            # maybe the whole response is a JSON array
+                            parsed = json.loads(ai_resp)
+                    else:
+                        # try direct JSON array
+                        parsed = json.loads(ai_resp)
+                except Exception:
+                    parsed = None
+
+                if isinstance(parsed, list):
+                    for item in parsed:
+                        if isinstance(item, str) and item.strip():
+                            facts.append(item.strip())
+                        if len(facts) >= max_facts:
+                            break
+                else:
+                    # Fallback: split by lines and take short ones
+                    lines = [ln.strip('-* \t') for ln in re.split(r"\r?\n", ai_resp) if ln.strip()]
+                    for ln in lines:
+                        # ignore empty lines
+                        if ln:
+                            facts.append(ln.strip())
+                        if len(facts) >= max_facts:
+                            break
+
+                # Final sanitization: keep unique, short facts
+                unique = []
+                seen = set()
+                for f in facts:
+                    s = f.strip()
+                    if s and s not in seen:
+                        seen.add(s)
+                        unique.append(s)
+                return unique[:max_facts]
+        except Exception:
+            return []
+
+        return []
     
     async def start_number_guessing(self, user_id, max_number=DEFAULT_GUESSING_MAX, ctx=None):
         """Start a number guessing game with countdown"""
@@ -728,6 +823,46 @@ class TsundereGames:
                         if len(valid_answers) > 1:
                             answers_display = ", ".join([f"**{v}**" for v in valid_answers])
                             await ctx.send(f"💡 Other acceptable answers: {answers_display}")
+
+                # Try to fetch and show a few additional facts about the answer (if available)
+                try:
+                    key_term = None
+                    # Prefer variants that match DB knowledge entries (most relevant)
+                    if valid_answers and self.ai_db:
+                        best_candidate = None
+                        best_score = -1
+                        for candidate in valid_answers:
+                            try:
+                                results = await self.ai_db.search_knowledge(candidate, limit=1)
+                            except Exception:
+                                results = []
+                            if results:
+                                # use relevance_score if available, else treat as match
+                                score = results[0].get('relevance_score') or 1.0
+                                if score > best_score:
+                                    best_score = score
+                                    best_candidate = candidate
+                        if best_candidate:
+                            key_term = best_candidate
+
+                    # If no DB match or no DB available, prefer multi-word variants (more specific), then longest
+                    if not key_term and valid_answers:
+                        # choose by number of words, then by length
+                        key_term = max(valid_answers, key=lambda s: (len(s.split()), len(s)))
+
+                    # Final fallback
+                    if not key_term:
+                        key_term = correct_answer
+
+                    if (self.ai_db or self.api_manager) and key_term:
+                        facts = await self._fetch_additional_facts(key_term, max_facts=3)
+                        if facts:
+                            facts_display = "\n".join([f"- {f}" for f in facts])
+                            await ctx.send(f"📚 Additional facts about **{key_term}**:\n{facts_display}")
+                except Exception:
+                    # Don't let facts retrieval break result flow
+                    logger.exception("Failed to fetch additional facts")
+                    pass
 
                 # Announce a few incorrect answers
                 if incorrect_users and len(correct_users) > 0:  # Only show wrong answers if someone got it right
