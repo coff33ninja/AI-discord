@@ -7,7 +7,7 @@ without depending directly on the lower-level DB implementation.
 import logging
 from typing import List, Optional, Dict
 
-logger = logging.getLogger(__name__)
+import json
 
 
 class KnowledgeManager:
@@ -23,12 +23,95 @@ class KnowledgeManager:
         self.ai_db = ai_db
 
     async def add_knowledge(self, category: str, key_term: str, content: str, relevance_score: float = 1.0):
-        """Add or replace a knowledge entry. Returns None or raises on error."""
+        """Add knowledge to the DB.
+
+        Behavior: merge/append new facts into any existing record for (category, key_term).
+        - If existing content is JSON array or object, attempt to merge entries (dedupe by 'text').
+        - If existing content is plain text, convert to a single-item list and merge.
+        - The final stored `content` is a JSON array string.
+        """
         if not self.ai_db:
             logger.debug("No AI DB configured; skipping add_knowledge")
             return None
         try:
-            return await self.ai_db.add_knowledge(category, key_term, content, relevance_score)
+            # Normalize incoming content into a list of fact objects
+            new_items = []
+            try:
+                parsed = json.loads(content)
+                if isinstance(parsed, list):
+                    new_items = parsed
+                elif isinstance(parsed, dict):
+                    new_items = [parsed]
+                else:
+                    # Primitive types -> wrap as text
+                    new_items = [{'text': str(parsed)}]
+            except Exception:
+                # Not JSON -> treat as plain text
+                new_items = [{'text': str(content)}]
+
+            # Try to find existing record for exact (category, key_term)
+            existing_rows = []
+            try:
+                existing_rows = await self.ai_db.search_knowledge(key_term, category, limit=5)
+            except Exception:
+                existing_rows = []
+
+            existing_content = None
+            for r in existing_rows:
+                if r.get('key_term') == key_term:
+                    existing_content = r.get('content')
+                    break
+
+            merged = []
+            seen_texts = set()
+
+            # Load existing items if present
+            if existing_content:
+                try:
+                    parsed_existing = json.loads(existing_content)
+                    if isinstance(parsed_existing, list):
+                        for it in parsed_existing:
+                            text = (it.get('text') if isinstance(it, dict) else str(it))
+                            key = text.strip().lower()
+                            if key not in seen_texts:
+                                seen_texts.add(key)
+                                merged.append(it)
+                    elif isinstance(parsed_existing, dict):
+                        text = parsed_existing.get('text') if isinstance(parsed_existing, dict) else str(parsed_existing)
+                        key = text.strip().lower()
+                        seen_texts.add(key)
+                        merged.append(parsed_existing)
+                    else:
+                        txt = str(parsed_existing)
+                        seen_texts.add(txt.strip().lower())
+                        merged.append({'text': txt})
+                except Exception:
+                    # Treat raw existing content as single text item
+                    txt = str(existing_content)
+                    seen_texts.add(txt.strip().lower())
+                    merged.append({'text': txt})
+
+            # Merge in new items, dedupe by lowercase text
+            for it in new_items:
+                if isinstance(it, dict):
+                    text = it.get('text') or it.get('content') or str(it)
+                else:
+                    text = str(it)
+                key = text.strip().lower()
+                if key in seen_texts:
+                    continue
+                seen_texts.add(key)
+                # Prefer to store dicts when supplied
+                if isinstance(it, dict):
+                    merged.append(it)
+                else:
+                    merged.append({'text': text})
+
+            # Final content as JSON array
+            final_content = json.dumps(merged, ensure_ascii=False)
+
+            return await self.ai_db.add_knowledge(category, key_term, final_content, relevance_score)
+
         except Exception as e:
             logger.exception(f"Failed to add knowledge: {e}")
             return None

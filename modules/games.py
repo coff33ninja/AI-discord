@@ -109,7 +109,7 @@ class TsundereGames:
             if v not in seen:
                 seen.add(v)
                 unique.append(v)
-        
+
         return unique if unique else []
     
     def _get_persona_response(self, category, subcategory, **format_kwargs):
@@ -137,6 +137,7 @@ class TsundereGames:
           facts and parse the response.
         - Returns a list of short fact strings (may be empty).
         """
+        # Return a list of fact dicts: { 'text': <str>, 'meta': {optional metadata} }
         facts = []
         if not term:
             return facts
@@ -155,31 +156,38 @@ class TsundereGames:
 
         # Process DB results into short sentences
         try:
-            for r in results or []:
-                content = ''
-                if isinstance(r, dict):
-                    content = r.get('content') or r.get('text') or ''
-                else:
-                    content = str(r)
-                # Take the first sentence to keep facts short
-                first_sentence = re.split(r'[\.\n]', content.strip())[0].strip()
-                # sanitize common noisy characters
-                first_sentence = re.sub(r'^\s+|\s+$', '', first_sentence)
-                first_sentence = first_sentence.strip('`')
-                if first_sentence:
-                    facts.append(first_sentence)
-                if len(facts) >= max_facts:
-                    break
-            if facts:
-                # return unique facts
-                unique = []
-                seen = set()
-                for f in facts:
-                    s = f.strip()
-                    if s and s not in seen:
-                        seen.add(s)
-                        unique.append(s)
-                return unique[:max_facts]
+                for r in results or []:
+                    # r may be a dict with structured fields or a plain string
+                    text = ''
+                    meta = {}
+                    if isinstance(r, dict):
+                        # common field names
+                        text = r.get('content') or r.get('text') or r.get('fact') or ''
+                        # try to collect any metadata fields
+                        for k in ('meta', 'metadata', 'source', 'date', 'location', 'when'):
+                            if k in r and r.get(k):
+                                meta[k] = r.get(k)
+                    else:
+                        text = str(r)
+
+                    # Take the first sentence to keep facts short
+                    first_sentence = re.split(r'[\.\n]', str(text).strip())[0].strip()
+                    first_sentence = re.sub(r'^\s+|\s+$', '', first_sentence)
+                    first_sentence = first_sentence.strip('`')
+                    if first_sentence:
+                        facts.append({'text': first_sentence, 'meta': meta})
+                    if len(facts) >= max_facts:
+                        break
+                if facts:
+                    # dedupe by text
+                    unique = []
+                    seen = set()
+                    for f in facts:
+                        s = f.get('text', '').strip()
+                        if s and s not in seen:
+                            seen.add(s)
+                            unique.append(f)
+                    return unique[:max_facts]
         except Exception:
             # ignore DB processing errors and fall back to AI
             pass
@@ -850,23 +858,57 @@ class TsundereGames:
                         if (self.ai_db or self.api_manager) and key_term:
                             facts = await self._fetch_additional_facts(key_term, max_facts=3)
                             if facts:
-                                facts_display = "\n".join([f"- {f}" for f in facts])
-                                try:
-                                    await ctx.send(f"📚 Additional facts about **{key_term}**:\n{facts_display}")
-                                except Exception:
-                                    # ignore send errors
-                                    pass
+                                    # Build sanitized bullet lines and persist structured facts
+                                    sanitized_lines = []
+                                    for f in facts:
+                                        text = ''
+                                        meta = {}
+                                        if isinstance(f, dict):
+                                            text = f.get('text') or ''
+                                            meta = f.get('meta') or {}
+                                        else:
+                                            text = str(f)
 
-                                # Persist facts into the knowledge DB under 'facts'
-                                for fact in facts:
+                                        text = re.sub(r'\s+', ' ', text).strip(' `')
+                                        if text.endswith(',') or text.endswith(';'):
+                                            text = text[:-1].strip()
+
+                                        meta_str = ''
+                                        if isinstance(meta, dict) and meta:
+                                            parts = []
+                                            for k, v in meta.items():
+                                                try:
+                                                    parts.append(f"{k}: {v}")
+                                                except Exception:
+                                                    parts.append(f"{k}: {str(v)}")
+                                            meta_str = '; '.join(parts)
+
+                                        if meta_str:
+                                            line = f"{text} ({meta_str})"
+                                        else:
+                                            line = text
+
+                                        if line:
+                                            sanitized_lines.append(line)
+
+                                    facts_display = "\n".join([f"- {line}" for line in sanitized_lines])
                                     try:
-                                        if self.knowledge_manager:
-                                            await self.knowledge_manager.add_knowledge('facts', key_term, fact)
-                                        elif self.ai_db:
-                                            await self.ai_db.add_knowledge('facts', key_term, fact)
+                                        await ctx.send(f"📚 Additional facts about **{key_term}**:\n{facts_display}")
                                     except Exception:
-                                        # Don't let persistence errors break result flow
-                                        logger.exception('Failed to persist fact to DB')
+                                        pass
+
+                                    # Persist all facts into a single DB record under category 'facts'
+                                    try:
+                                        payloads = []
+                                        for f in facts:
+                                            payloads.append(f if isinstance(f, dict) else {'text': str(f)})
+                                        content = json.dumps(payloads, ensure_ascii=False)
+                                        if self.knowledge_manager:
+                                            await self.knowledge_manager.add_knowledge('facts', key_term, content)
+                                        elif self.ai_db:
+                                            await self.ai_db.add_knowledge('facts', key_term, content)
+                                    except Exception:
+                                        logger.exception('Failed to persist aggregated facts to DB')
                     except Exception:
                         logger.exception('Error while fetching/storing additional facts for unanswered trivia')
             except Exception:
@@ -965,24 +1007,41 @@ class TsundereGames:
                     if (self.ai_db or self.api_manager) and key_term:
                         facts = await self._fetch_additional_facts(key_term, max_facts=3)
                         if facts:
-                            # Sanitize each fact to ensure plain-text, single-line bullets
+                            # Build sanitized bullet lines from structured facts
                             sanitized = []
                             for f in facts:
-                                if not isinstance(f, str):
-                                    f = str(f)
-                                # remove surrounding JSON brackets/braces if present
-                                f = f.strip()
-                                if (f.startswith('{') and f.endswith('}')) or (f.startswith('[') and f.endswith(']')):
-                                    # try to extract inner text heuristically
-                                    inner = re.sub(r'^[\[{\s\n]+|[\]}\s\n]+$', '', f)
-                                    f = inner
-                                # collapse whitespace and remove stray backticks
-                                f = re.sub(r'\s+', ' ', f).strip(' `')
-                                # remove trailing commas or semicolons
-                                if f.endswith(',') or f.endswith(';'):
-                                    f = f[:-1].strip()
-                                if f:
-                                    sanitized.append(f)
+                                text = ''
+                                meta = {}
+                                if isinstance(f, dict):
+                                    text = f.get('text') or ''
+                                    meta = f.get('meta') or {}
+                                else:
+                                    # fallback: stringify
+                                    text = str(f)
+
+                                # cleanup text
+                                text = re.sub(r'\s+', ' ', text).strip(' `')
+                                if text.endswith(',') or text.endswith(';'):
+                                    text = text[:-1].strip()
+
+                                # format metadata into a compact string if present
+                                meta_str = ''
+                                if isinstance(meta, dict) and meta:
+                                    parts = []
+                                    for k, v in meta.items():
+                                        try:
+                                            parts.append(f"{k}: {v}")
+                                        except Exception:
+                                            parts.append(f"{k}: {str(v)}")
+                                    meta_str = '; '.join(parts)
+
+                                if meta_str:
+                                    line = f"{text} ({meta_str})"
+                                else:
+                                    line = text
+
+                                if line:
+                                    sanitized.append(line)
 
                             # Build a single human-readable message with bullets
                             facts_display = "\n".join([f"- {line}" for line in sanitized])

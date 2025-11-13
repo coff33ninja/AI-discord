@@ -77,7 +77,8 @@ class AIDatabase:
                 relevance_score REAL DEFAULT 1.0,
                 usage_count INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(category, key_term)
             )
         """)
         
@@ -233,10 +234,14 @@ class AIDatabase:
     async def add_knowledge(self, category: str, key_term: str, content: str,
                           relevance_score: float = 1.0):
         async with aiosqlite.connect(self.db_path) as db:
+            # Use upsert semantics: insert new record or update content for same (category,key_term)
             await db.execute("""
-                INSERT OR REPLACE INTO knowledge_base 
-                (category, key_term, content, relevance_score)
+                INSERT INTO knowledge_base (category, key_term, content, relevance_score)
                 VALUES (?, ?, ?, ?)
+                ON CONFLICT(category, key_term) DO UPDATE SET
+                    content = excluded.content,
+                    relevance_score = excluded.relevance_score,
+                    updated_at = CURRENT_TIMESTAMP
             """, (category, key_term, content, relevance_score))
             await db.commit()
 
