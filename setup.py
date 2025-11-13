@@ -237,17 +237,72 @@ def main():
     print("1. Edit .env file with your API keys")
     print("2. Activate venv: .venv\\Scripts\\activate (Windows) or source .venv/bin/activate (Linux/Mac)")
     print("3. Run: python bot.py")
-    print("\n🎤 Voice Features:")
-    print("   KittenTTS (TTS) was automatically installed for Python 3.12")
-    print("   Whisper (STT) is included for speech recognition")
-    print("   Ready to use: !join_voice, !listen, !speak commands")
-    print("\n💡 Using uv for faster installs and synced dependencies!")
-    print("   To update packages: uv pip install --upgrade <package>")
-    print("   To sync all: uv pip install -r requirements.txt")
-    print("   To install new Python: uv python install 3.12")
+def launch_bot():
+    """Ask user which bot variant to launch and start it"""
+    print("\n" + "=" * 50)
+    print("🤖 Launch Discord AI Bot")
+    print("=" * 50)
+    print("\nWhich bot would you like to run?")
+    print("1. 🚀 Normal Mode (python bot.py)")
+    print("2. 🔄 Development Mode (python dev_bot.py - auto-restart on changes)")
+    print("3. ⏭️  Skip - I'll run it manually later")
     
-    return True
+    while True:
+        choice = input("\nEnter your choice (1-3): ").strip()
+        
+        if choice == "1":
+            print("\n🚀 Starting bot in normal mode...")
+            print("   (Press Ctrl+C to stop)\n")
+            try:
+                subprocess.run([sys.executable, "bot.py"])
+            except KeyboardInterrupt:
+                print("\n\n👋 Bot stopped. Goodbye!")
+            return True
+            
+        elif choice == "2":
+            print("\n🔄 Starting bot in development mode...")
+            print("   (Auto-restarts on file changes, Press Ctrl+C to stop)\n")
+            try:
+                subprocess.run([sys.executable, "dev_bot.py"])
+            except KeyboardInterrupt:
+                print("\n\n👋 Bot stopped. Goodbye!")
+            return True
+            
+        elif choice == "3":
+            print("\n⏭️  Skipping bot launch.")
+            print("   You can start the bot manually later with:")
+            print("   - Normal:      python bot.py")
+            print("   - Development: python dev_bot.py")
+            return True
+            
+        else:
+            print("❌ Invalid choice. Please enter 1, 2, or 3.")
+
+def main_with_launch():
+    """Main setup function with bot launch option"""
+    success = main()
+    
+    if success:
+        print("\n" + "=" * 50)
+        print("🎉 Setup complete!")
+        print("=" * 50)
+        
+        print("\n🎤 Voice Features:")
+        print("   KittenTTS (TTS) was automatically installed for Python 3.12")
+        print("   Whisper (STT) is included for speech recognition")
+        print("   Ready to use: !join_voice, !listen, !speak commands")
+        print("\n💡 Using uv for faster installs and synced dependencies!")
+        print("   To update packages: uv pip install --upgrade <package>")
+        print("   To sync all: uv pip install -r requirements.txt")
+        print("   To install new Python: uv python install 3.12")
+        
+        # Ask user if they want to launch the bot
+        response = input("\n🤔 Would you like to launch the bot now? (y/n): ").strip().lower()
+        if response == 'y':
+            launch_bot()
+    
+    return success
 
 if __name__ == "__main__":
-    success = main()
+    success = main_with_launch()
     sys.exit(0 if success else 1)
