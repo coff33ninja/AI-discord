@@ -161,6 +161,20 @@ async def ask_gemini(ctx, *, question):
         
         # Show typing indicator
         async with ctx.typing():
+            # Get conversation history for context
+            try:
+                user_prefs = await ai_db.get_user_preferences(str(ctx.author.id))
+                memory_limit = user_prefs.get('conversation_memory', 5)
+                conversation_history = await ai_db.get_conversation_history(
+                    str(ctx.author.id), 
+                    limit=memory_limit,
+                    channel_id=str(ctx.channel.id)
+                )
+                logger.info(f"Retrieved {len(conversation_history)} previous conversations for context")
+            except Exception as e:
+                logger.warning(f"Failed to retrieve conversation history: {e}")
+                conversation_history = []
+            
             # Check if this question would benefit from web search
             needs_search = await should_search_web(question)
             logger.info(f"Search needed for question: {needs_search}")
@@ -180,19 +194,28 @@ async def ask_gemini(ctx, *, question):
                 # Get search results
                 search_results = await search.search_duckduckgo(search_query)
                 
+                # Create conversation context
+                context_text = ""
+                if conversation_history:
+                    context_text = "\n\nPrevious conversation context:\n"
+                    for conv in conversation_history[-3:]:  # Last 3 conversations for context
+                        context_text += f"User: {conv['message_content'][:100]}...\n"
+                        context_text += f"You: {conv['ai_response'][:100]}...\n"
+                
                 # Create enhanced prompt with search results
-                enhanced_prompt = f"""You are Coffee, a tsundere AI assistant. The user asked: "{question}"
-
+                enhanced_prompt = f"""You are Coffee, a tsundere AI assistant. The user {ctx.author.display_name} asked: "{question}"
+{context_text}
 I searched the web and found this information:
 {search_results}
 
 Your task:
 1. Answer the user's question using both your knowledge AND the search results
-2. Maintain your tsundere personality throughout
-3. If the search results are relevant, incorporate them naturally
-4. If the search results aren't helpful, rely on your knowledge but mention you tried to search
-5. Keep your response under 1800 characters for Discord
-6. Use your speech patterns: "Ugh", "baka", "It's not like...", etc.
+2. Use the conversation history to provide continuity and remember what you've discussed
+3. Maintain your tsundere personality throughout
+4. If the search results are relevant, incorporate them naturally
+5. If the search results aren't helpful, rely on your knowledge but mention you tried to search
+6. Keep your response under 1800 characters for Discord
+7. Use your speech patterns: "Ugh", "baka", "It's not like...", etc.
 
 Be helpful but act annoyed about having to search for them."""
 
@@ -207,14 +230,14 @@ Be helpful but act annoyed about having to search for them."""
                     # Fallback to normal AI if enhanced fails
                     logger.warning("Enhanced AI failed, falling back to normal response")
                     print("⚠️ Enhanced AI failed, falling back to normal response")
-                    tsundere_prompt = personality.create_ai_prompt(question)
+                    tsundere_prompt = create_memory_enhanced_prompt(question, ctx.author.display_name, conversation_history)
                     response_text = await api_manager.generate_content(tsundere_prompt)
                     model_used = "gemini-pro"
                     tokens_used = len(tsundere_prompt.split()) + (len(response_text.split()) if response_text else 0)
             else:
                 # Normal AI response without search
                 logger.info("Generating normal AI response without search")
-                tsundere_prompt = personality.create_ai_prompt(question)
+                tsundere_prompt = create_memory_enhanced_prompt(question, ctx.author.display_name, conversation_history)
                 response_text = await api_manager.generate_content(tsundere_prompt)
                 tokens_used = len(tsundere_prompt.split()) + (len(response_text.split()) if response_text else 0)
             
@@ -297,6 +320,27 @@ async def extract_search_terms(question):
     
     return search_terms
 
+def create_memory_enhanced_prompt(question, username, conversation_history):
+    """Create a prompt that includes conversation history for memory"""
+    base_prompt = personality.create_ai_prompt(question)
+    
+    if not conversation_history:
+        return base_prompt
+    
+    # Add conversation context
+    context_text = f"\n\nConversation history with {username}:\n"
+    for conv in conversation_history[-3:]:  # Last 3 conversations for context
+        context_text += f"User: {conv['message_content'][:150]}\n"
+        context_text += f"You: {conv['ai_response'][:150]}\n\n"
+    
+    # Insert context into the base prompt
+    enhanced_prompt = base_prompt.replace(
+        f'The user asked: "{question}"',
+        f'The user {username} asked: "{question}"{context_text}Remember our previous conversations and maintain continuity.'
+    )
+    
+    return enhanced_prompt
+
 @bot.command(name='help_ai', aliases=['commands'])
 async def help_command(ctx):
     """Show bot help"""
@@ -311,7 +355,7 @@ async def help_command(ctx):
         fields=[
             {
                 'name': "**AI & Chat**",
-                'value': "`!ai <question>` (or `!ask`, `!chat`) - Ask me stuff, I guess...\n`!compliment` - Compliment me (watch me get flustered)\n`!mood` - Check my current mood\n`!relationship` - See how close we are",
+                'value': "`!ai <question>` (or `!ask`, `!chat`) - Ask me stuff, I guess...\n`!compliment` - Compliment me (watch me get flustered)\n`!mood` - Check my current mood\n`!relationship` - See how close we are\n`!memory [number]` - View/adjust conversation memory",
                 'inline': False
             },
             {
@@ -356,16 +400,41 @@ async def on_message(message):
         try:
             logger.info(f"Bot mentioned by user {message.author.id} in guild {message.guild.id}: {message.content[:100]}")
             
-            # Get user relationship for personalized response
-            user_data = social.get_user_relationship(message.author.id)
-            relationship_level = user_data['relationship_level']
+            # Update social interaction
+            social.update_interaction(message.author.id)
             
-            # Generate AI response for being mentioned
-            prompt = persona_manager.create_ai_prompt(
-                f"mentioned me in chat: '{message.content}'", 
-                message.author.display_name, relationship_level
-            )
+            # Get conversation history for context
+            try:
+                conversation_history = await ai_db.get_conversation_history(
+                    str(message.author.id), 
+                    limit=3,
+                    channel_id=str(message.channel.id)
+                )
+            except Exception:
+                conversation_history = []
+            
+            # Generate AI response for being mentioned with memory
+            mention_text = f"mentioned me in chat: '{message.content}'"
+            prompt = create_memory_enhanced_prompt(mention_text, message.author.display_name, conversation_history)
             response = await api_manager.generate_content(prompt)
+            
+            # Save the mention interaction
+            if response:
+                try:
+                    await save_ai_conversation(
+                        user_id=str(message.author.id),
+                        message=message.content,
+                        response=response,
+                        model="gemini-pro-mention",
+                        channel_id=str(message.channel.id),
+                        guild_id=str(message.guild.id) if message.guild else None,
+                        context_data={
+                            'username': message.author.display_name,
+                            'interaction_type': 'mention'
+                        }
+                    )
+                except Exception as db_error:
+                    logger.error(f"Failed to save mention conversation: {db_error}")
             
             if response:
                 await message.channel.send(response)
@@ -942,6 +1011,63 @@ async def api_status(ctx):
         # Fallback to persona card response
         fallback = persona_manager.get_activity_response("admin", "no_permission")
         await ctx.send(fallback)
+
+@bot.command(name='memory', aliases=['memory_settings'])
+async def memory_settings(ctx, memory_length: int = None):
+    """View or adjust AI memory settings"""
+    logger.info(f"Memory settings command called by user {ctx.author.id}")
+    
+    try:
+        user_prefs = await ai_db.get_user_preferences(str(ctx.author.id))
+        current_memory = user_prefs.get('conversation_memory', 5)
+        
+        if memory_length is None:
+            # Just show current settings
+            embed = discord.Embed(
+                title="🧠 Memory Settings",
+                description=f"Your current conversation memory: **{current_memory}** messages",
+                color=0x00ff00
+            )
+            embed.add_field(
+                name="How it works",
+                value="I remember our last few conversations to provide better context.\n"
+                      "Higher numbers = more memory but slower responses.\n"
+                      "Range: 1-10 messages",
+                inline=False
+            )
+            embed.add_field(
+                name="Change Settings",
+                value="Use `!memory <number>` to adjust\nExample: `!memory 8`",
+                inline=False
+            )
+            await ctx.send(embed=embed)
+        else:
+            # Update memory settings
+            if 1 <= memory_length <= 10:
+                await ai_db.update_user_preferences(str(ctx.author.id), {
+                    'conversation_memory': memory_length
+                })
+                
+                # Generate AI response about the memory change
+                prompt = create_memory_enhanced_prompt(
+                    f"changed memory settings to {memory_length} messages", 
+                    ctx.author.display_name, 
+                    []
+                )
+                response = await api_manager.generate_content(prompt)
+                
+                if response:
+                    await ctx.send(response)
+                else:
+                    await ctx.send(f"✅ Memory updated to {memory_length} messages!")
+                
+                logger.info(f"User {ctx.author.id} updated memory to {memory_length}")
+            else:
+                await ctx.send("❌ Memory length must be between 1 and 10 messages!")
+                
+    except Exception as e:
+        logger.error(f"Error in memory settings: {e}")
+        await ctx.send(f"❌ Error updating memory settings: {e}")
 
 @bot.command(name='ai_analytics')
 async def ai_analytics(ctx, days: int = 7):
