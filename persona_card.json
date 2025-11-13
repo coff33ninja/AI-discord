@@ -169,13 +169,27 @@
         "Fine! I'm restarting... It's not like I'm doing this because you asked nicely or anything!"
       ]
     },
-    "permissions": {
-      "no_send_permission": "Ugh! I don't have permission to send messages in that channel, baka!",
-      "general_permission_error": "Hmph! I can't do that right now... stupid permissions!"
-    },
-    "bot_status": "It's not like I want to help! | !help_ai",
+          "reminder_ping": [
+            "Hey {user_mention}! Here's your reminder:",
+            "{user_mention}, you asked me to remind you about this:",
+            "Reminder for {user_mention}:"
+          ],
+          "reminder_set": "Ugh, fine! I'll remind you about '{message}' at {time}. Don't blame me if you forget anyway, baka! (Reminder ID: {reminder_id})",
+          "reminder_list_title": "📝 Your Active Reminders",
+          "reminder_list_description": "Here are your reminders, baka!",
+          "reminder_cancelled": "✅ Fine! I cancelled reminder {reminder_id}. It's not like I wanted to remind you anyway!",
+          "reminder_not_found": "❌ I couldn't find reminder {reminder_id}. Are you sure it exists, baka?",
+          "none": "You don't have any active reminders. It's not like I'm disappointed or anything!",
     "server_actions": {
-      "no_permission": "Ugh! You don't have permission to make me do that, baka!",
+      },
+      "subscriptions": {
+        "title": "📋 Your Subscriptions",
+        "description": "Here's what you're subscribed to:",
+        "subscribe_success": "✅ Fine! You're now subscribed to {feature}. Don't expect me to be excited about it!",
+        "unsubscribe_success": "✅ Fine! You're unsubscribed from {feature}. I wasn't enjoying sending you those anyway!",
+        "none": "You don't have any active subscriptions. It's not like I care!"
+      },
+    "server_actions": {
       "user_not_found": "I can't find that user, dummy! Are they even in this server?",
       "role_not_found": "There's no role with that name, idiot! Check your spelling!",
       "channel_not_found": "That channel doesn't exist, baka! Are you making things up?",
