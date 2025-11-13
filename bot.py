@@ -515,6 +515,11 @@ async def help_command(ctx):
                 'inline': False
             },
             {
+                'name': "**Voice Interaction** (Beta)",
+                'value': "`!join_voice` - Bot joins your voice channel\n`!leave_voice` - Bot leaves voice channel\n`!listen` - Bot listens for your speech (auto-transcribe & respond)\n`!stop_listening` - Stop listening\n`!speak <text>` - Bot speaks specific text\n`!voice_ask <question>` - Ask question and get voice response\n`!voice_history` - Show conversation history\n`!clear_voice_history` - Clear history\n`!ai_voice` / `!toggle_auto_speak` - Auto-speak on mentions",
+                'inline': False
+            },
+            {
                 'name': "**Admin Commands** (admin only)",
                 'value': "`!reload_persona` - Reload personality config\n`!persona_health` - Check persona configuration health\n`!persona_report` - Generate detailed persona report\n`!api_status` - Check API key status\n`!ai_analytics` - View AI usage stats\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
                 'inline': False
