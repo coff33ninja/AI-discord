@@ -9,6 +9,41 @@ import sys
 import subprocess
 import shutil
 
+def find_python_312():
+    """Try to find Python 3.12 executable"""
+    import shutil
+    
+    possible_commands = ["python3.12", "python3.12.exe", "py", "-3.12"]
+    
+    for cmd in possible_commands:
+        if shutil.which(cmd):
+            try:
+                result = subprocess.run(
+                    [cmd, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if "3.12" in result.stdout or "3.12" in result.stderr:
+                    return cmd
+            except Exception:
+                continue
+    
+    return None
+
+def rerun_with_python_312(python_312_cmd):
+    """Re-execute setup.py with Python 3.12"""
+    print("\n🔄 Automatically re-running setup.py with Python 3.12...")
+    print("=" * 50)
+    print()
+    
+    try:
+        result = subprocess.run([python_312_cmd, "setup.py"])
+        sys.exit(result.returncode)
+    except Exception as e:
+        print(f"❌ Error running Python 3.12: {e}")
+        return False
+
 def check_python_version():
     """Check if Python version is 3.12 or higher"""
     if sys.version_info < (3, 12):
@@ -16,7 +51,7 @@ def check_python_version():
         print(f"Current version: {sys.version}")
         print("\n🔧 Would you like to install Python 3.12 using uv?")
         print("   This will download and install Python 3.12 alongside your current version.")
-        print("   You can then use it for this project specifically.")
+        print("   Setup will then automatically continue with Python 3.12.")
         
         response = input("\nInstall Python 3.12 with uv? (y/N): ").strip().lower()
         if response == 'y':
@@ -27,9 +62,21 @@ def check_python_version():
             
             print("\n🔧 Installing Python 3.12 with uv...")
             if install_python_3_12():
-                print("\n✅ Python 3.12 installation started!")
-                print("   Please restart your terminal and run setup.py again to continue.")
-                return False
+                print("\n✅ Python 3.12 installed successfully!")
+                
+                # Try to find the newly installed Python 3.12
+                print("\n🔍 Locating Python 3.12...")
+                python_312 = find_python_312()
+                
+                if python_312:
+                    print(f"✅ Found Python 3.12: {python_312}")
+                    rerun_with_python_312(python_312)
+                    return False  # Exit this process
+                else:
+                    print("⚠️  Could not locate Python 3.12 automatically")
+                    print("   Please restart your terminal or run:")
+                    print("   python3.12 setup.py")
+                    return False
             else:
                 print("\n❌ Python 3.12 installation failed.")
                 print("   Please install Python 3.12 manually from: https://www.python.org/downloads/")
