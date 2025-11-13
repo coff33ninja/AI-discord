@@ -516,13 +516,24 @@ The bot is constantly evolving! Here are some exciting features planned for futu
 
 ## 📚 Documentation
 
-Documentation is organized by category in the `/docs` folder:
+Complete documentation organized in the `/docs` folder:
 
-- **[`/docs/voice/`](./docs/voice/)** - Voice interaction features (STT, TTS, integration)
-- **[`/docs/setup/`](./docs/setup/)** - Setup guides for TTS and dependencies
-- **[`/docs/api/`](./docs/api/)** - API integration documentation
+### Quick References
+- **[Commands Reference](./docs/commands.md)** - All `!` commands with examples and usage
+- **[Modules Overview](./docs/MODULES.md)** - Index of all modules with links to detailed docs
 
-Each module contains detailed docstrings explaining functions, classes, and usage patterns.
+### Category Documentation
+- **[Voice Integration](./docs/voice/)** - STT, TTS, voice channel management
+- **[Setup Guides](./docs/setup/)** - Installation and configuration guides
+- **[API Documentation](./docs/api/)** - API integration details
+
+### Core Module Documentation
+- **[api_manager.py](./docs/modules/api_manager.md)** - Gemini AI API integration
+- **[ai_database.py](./docs/modules/ai_database.md)** - Database operations and data storage
+
+**⚠️ In Progress:** Additional module documentation is being expanded
+
+Each module also contains detailed docstrings - use Python's `help()` or your IDE's tooltips for quick reference.
 
 ---
 
