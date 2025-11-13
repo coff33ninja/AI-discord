@@ -14,9 +14,18 @@ from modules.server_actions import TsundereServerActions
 from modules.persona_manager import PersonaManager
 from modules.search import TsundereSearch
 from modules.api_manager import GeminiAPIManager
+from modules.config_manager import ConfigManager
+from modules.response_handler import ResponseHandler
+from modules.logger import BotLogger
+
+# Initialize logger
+logger = BotLogger.get_logger(__name__)
 
 # Load environment variables
 load_dotenv()
+
+# Initialize Config Manager
+config = ConfigManager()
 
 # Initialize API Manager with rotating keys
 api_manager = GeminiAPIManager()
@@ -39,18 +48,26 @@ search = None  # Will be initialized after model is ready
 @bot.event
 async def on_ready():
     global utilities, search
+    logger.info(f"Bot {bot.user} connected to Discord")
+    logger.info(f"Bot is in {len(bot.guilds)} guilds")
     print(f'{bot.user} has connected to Discord!')
     print(f'Bot is in {len(bot.guilds)} guilds')
     
     # Initialize utilities and search with the model
+    logger.info("Initializing utilities module")
     print("🔧 Initializing utilities...")
     utilities = TsundereUtilities(model)
+    
+    logger.info("Initializing search module")
     print("🔍 Initializing search module...")
     search = TsundereSearch(model)
+    
+    logger.info("All modules initialized successfully")
     print("✅ All modules initialized successfully!")
     
     # Print API manager status
     status = api_manager.get_status()
+    logger.info(f"API manager initialized: {status['total_keys']} keys, current key #{status['current_key']}")
     print(f"🔑 Using {status['total_keys']} API key(s), currently on key #{status['current_key']}")
     
     # Set tsundere status
@@ -99,6 +116,8 @@ async def should_search_web(question):
 async def ask_gemini(ctx, *, question):
     """Ask Gemini AI a question with intelligent search integration"""
     try:
+        logger.info(f"AI command called by user {ctx.author.id}, question: {question[:100]}")
+        
         # Update social interaction
         social.update_interaction(ctx.author.id)
         
@@ -106,12 +125,15 @@ async def ask_gemini(ctx, *, question):
         async with ctx.typing():
             # Check if this question would benefit from web search
             needs_search = await should_search_web(question)
+            logger.info(f"Search needed for question: {needs_search}")
             
             if needs_search and search is not None:
+                logger.info(f"Performing web search for: {question}")
                 print(f"🔍 AI detected search need for: {question}")
                 
                 # Extract search terms from the question
                 search_query = await extract_search_terms(question)
+                logger.info(f"Extracted search terms: {search_query}")
                 print(f"🎯 Extracted search terms: {search_query}")
                 
                 # Get search results
@@ -136,33 +158,41 @@ Be helpful but act annoyed about having to search for them."""
                 response_text = await api_manager.generate_content(enhanced_prompt)
                 
                 if response_text:
+                    logger.info(f"Enhanced AI response generated successfully")
                     print(f"🤖 Enhanced AI response with search: {response_text[:100]}...")
                 else:
                     # Fallback to normal AI if enhanced fails
+                    logger.warning("Enhanced AI failed, falling back to normal response")
                     print("⚠️ Enhanced AI failed, falling back to normal response")
                     tsundere_prompt = personality.create_ai_prompt(question)
                     response_text = await api_manager.generate_content(tsundere_prompt)
             else:
                 # Normal AI response without search
+                logger.info("Generating normal AI response without search")
                 tsundere_prompt = personality.create_ai_prompt(question)
                 response_text = await api_manager.generate_content(tsundere_prompt)
             
             if response_text is None:
                 # All API attempts failed
+                logger.error("All API attempts failed for AI command")
                 timeout_response = personality.get_error_response("AI timeout")
                 await ctx.send(timeout_response)
                 return
             
             # Discord has a 2000 character limit for messages
             if len(response_text) > 2000:
+                logger.info(f"Response too long ({len(response_text)} chars), splitting into chunks")
                 # Split long responses
                 chunks = [response_text[i:i+2000] for i in range(0, len(response_text), 2000)]
                 for chunk in chunks:
                     await ctx.send(chunk)
             else:
                 await ctx.send(response_text)
+            
+            logger.info(f"AI response sent successfully")
                 
     except Exception as e:
+        logger.error(f"AI command error: {str(e)}")
         print(f"💥 AI command error: {str(e)}")
         await ctx.send(personality.get_error_response(e))
 
@@ -188,44 +218,49 @@ async def extract_search_terms(question):
 @bot.command(name='help_ai', aliases=['commands'])
 async def help_command(ctx):
     """Show bot help"""
+    logger.info(f"Help command called by user {ctx.author.id}")
+    
     help_config = persona_manager.persona.get("activity_responses", {}).get("help_command", {})
     
-    embed = discord.Embed(
-        title=help_config.get("title", "Commands"),
-        description=help_config.get("description", "Here are the commands"),
-        color=0xff69b4
+    # Use ResponseHandler to create a formatted embed
+    embed = ResponseHandler.create_info_embed(
+        title=help_config.get("title", "Coffee's Commands"),
+        description=help_config.get("description", "Here are the commands I 'reluctantly' offer..."),
+        fields=[
+            {
+                'name': "**AI & Chat**",
+                'value': "`!ai <question>` (or `!ask`, `!chat`) - Ask me stuff, I guess...\n`!compliment` - Compliment me (watch me get flustered)\n`!mood` - Check my current mood\n`!relationship` - See how close we are",
+                'inline': False
+            },
+            {
+                'name': "**Utilities**",
+                'value': "`!time` - Get current time\n`!calc <math>` - Calculator\n`!dice [sides]` - Roll dice\n`!flip` - Flip a coin\n`!weather <city>` - Real weather info\n`!fact` - Random fact\n`!joke` - Random joke\n`!catfact` - Cat facts",
+                'inline': False
+            },
+            {
+                'name': "**Search**",
+                'value': "`!search <query>` (or `!google`, `!find`) - Search the web\n`!websearch <query>` (or `!web`) - Alternative web search",
+                'inline': False
+            },
+            {
+                'name': "**Games**",
+                'value': "`!game guess [max]` - Number guessing\n`!guess <number>` - Make a guess\n`!rps <choice>` (or `!rock`, `!paper`, `!scissors`) - Rock Paper Scissors\n`!8ball <question>` - Magic 8-ball\n`!trivia` - Start trivia game\n`!answer <answer>` - Answer trivia",
+                'inline': False
+            },
+            {
+                'name': "**Server Actions** (with permissions)",
+                'value': "`!mention @user [message]` - Mention someone\n`!create_role <name> [color]` - Create a role\n`!give_role @user <role>` - Give role to user\n`!remove_role @user <role>` - Remove role\n`!kick @user [reason]` - Kick user\n`!create_channel <name> [type]` - Create channel\n`!send_to #channel <message>` - Send message to channel",
+                'inline': False
+            },
+            {
+                'name': "**Admin Commands** (admin only)",
+                'value': "`!reload_persona` - Reload personality config\n`!api_status` - Check API key status\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
+                'inline': False
+            }
+        ],
+        footer_text=help_config.get("footer", "Use these commands!")
     )
-    embed.add_field(
-        name="**AI & Chat**",
-        value="`!ai <question>` (or `!ask`, `!chat`) - Ask me stuff, I guess...\n`!compliment` - Compliment me (watch me get flustered)\n`!mood` - Check my current mood\n`!relationship` - See how close we are",
-        inline=False
-    )
-    embed.add_field(
-        name="**Utilities**",
-        value="`!time` - Get current time\n`!calc <math>` - Calculator\n`!dice [sides]` - Roll dice\n`!flip` - Flip a coin\n`!weather <city>` - Real weather info\n`!fact` - Random fact\n`!joke` - Random joke\n`!catfact` - Cat facts",
-        inline=False
-    )
-    embed.add_field(
-        name="**Search**",
-        value="`!search <query>` (or `!google`, `!find`) - Search the web\n`!websearch <query>` (or `!web`) - Alternative web search",
-        inline=False
-    )
-    embed.add_field(
-        name="**Games**",
-        value="`!game guess [max]` - Number guessing\n`!guess <number>` - Make a guess\n`!rps <choice>` (or `!rock`, `!paper`, `!scissors`) - Rock Paper Scissors\n`!8ball <question>` - Magic 8-ball\n`!trivia` - Start trivia game\n`!answer <answer>` - Answer trivia",
-        inline=False
-    )
-    embed.add_field(
-        name="**Server Actions** (with permissions)",
-        value="`!mention @user [message]` - Mention someone\n`!create_role <name> [color]` - Create a role\n`!give_role @user <role>` - Give role to user\n`!remove_role @user <role>` - Remove role\n`!kick @user [reason]` - Kick user\n`!create_channel <name> [type]` - Create channel\n`!send_to #channel <message>` - Send message to channel",
-        inline=False
-    )
-    embed.add_field(
-        name="**Admin Commands** (admin only)",
-        value="`!reload_persona` - Reload personality config\n`!api_status` - Check API key status\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
-        inline=False
-    )
-    embed.set_footer(text=help_config.get("footer", "Use these commands!"))
+    
     await ctx.send(embed=embed)
 
 @bot.event
@@ -237,6 +272,8 @@ async def on_message(message):
     # Tsundere reactions to mentions
     if bot.user.mentioned_in(message) and not message.content.startswith('!'):
         try:
+            logger.info(f"Bot mentioned by user {message.author.id} in guild {message.guild.id}: {message.content[:100]}")
+            
             # Get user relationship for personalized response
             user_data = social.get_user_relationship(message.author.id)
             relationship_level = user_data['relationship_level']
@@ -250,10 +287,13 @@ async def on_message(message):
             
             if response:
                 await message.channel.send(response)
+                logger.info(f"Response sent to mention in guild {message.guild.id}")
         except discord.Forbidden:
+            logger.warning(f"No permission to send message in channel {message.channel.id}")
             # Bot doesn't have permission to send messages in this channel
             pass
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error handling mention: {e}")
             # Handle any other errors silently
             pass
     
@@ -263,6 +303,8 @@ async def on_message(message):
 @bot.command(name='compliment')
 async def compliment_ai(ctx):
     """Compliment the AI (watch her get flustered)"""
+    logger.info(f"Compliment command called by user {ctx.author.id}")
+    
     user_data = social.update_interaction(ctx.author.id)
     relationship_level = user_data['relationship_level']
     
@@ -274,8 +316,10 @@ async def compliment_ai(ctx):
     
     if response:
         await ctx.send(response)
+        logger.info(f"Compliment response sent to user {ctx.author.id}")
     else:
         # Fallback to persona card response
+        logger.warning("AI response failed, using fallback for compliment")
         fallback = personality.get_error_response("AI unavailable")
         await ctx.send(fallback)
 

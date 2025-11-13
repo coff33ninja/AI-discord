@@ -4,6 +4,10 @@ Games module - fun interactive games with persona-driven responses
 import random
 import asyncio
 from .persona_manager import PersonaManager
+from .logger import BotLogger
+
+# Initialize logger
+logger = BotLogger.get_logger(__name__)
 
 # Game constants
 TRIVIA_TIMEOUT = 30
@@ -38,6 +42,7 @@ class TsundereGames:
             'max': max_number
         }
         
+        logger.info(f"Number guessing game started for user {user_id} (1-{max_number})")
         persona_msg = self._get_persona_response("games", "start")
         start_text = persona_msg or "Let's play!"
         return f"{start_text} I picked a number between 1 and {max_number}. Try to guess it!"
@@ -45,15 +50,19 @@ class TsundereGames:
     async def guess_number(self, user_id, guess):
         """Process a number guess"""
         if user_id not in self.active_games or self.active_games[user_id]['type'] != 'number_guess':
+            logger.info(f"No active number guessing game for user {user_id}")
             return self._get_persona_response("games", "no_active_game") or "No active game."
         
         game = self.active_games[user_id]
         game['attempts'] += 1
         secret = game['secret']
         
+        logger.info(f"User {user_id} guessed {guess}, secret is {secret}, attempts: {game['attempts']}")
+        
         if guess == secret:
             attempts = game['attempts']
             del self.active_games[user_id]
+            logger.info(f"User {user_id} won number guessing game in {attempts} attempts")
             persona_msg = self._get_persona_response("games", "win")
             return f"{persona_msg or 'Congrats!'} It was {secret} in {attempts} tries!"
         elif guess < secret:
@@ -69,7 +78,10 @@ class TsundereGames:
         bot_choice = random.choice(choices)
         user_choice = user_choice.lower()
         
+        logger.info(f"Rock-paper-scissors: user chose {user_choice}, bot chose {bot_choice}")
+        
         if user_choice not in choices:
+            logger.warning(f"Invalid choice in rock-paper-scissors: {user_choice}")
             return "Pick rock, paper, or scissors!"
         
         if user_choice == bot_choice:
@@ -78,9 +90,11 @@ class TsundereGames:
         elif (user_choice == 'rock' and bot_choice == 'scissors') or \
              (user_choice == 'paper' and bot_choice == 'rock') or \
              (user_choice == 'scissors' and bot_choice == 'paper'):
+            logger.info("Rock-paper-scissors: user won")
             persona_msg = self._get_persona_response("games", "win")
             return f"{persona_msg or 'You won!'} You picked {user_choice}, I picked {bot_choice}."
         else:
+            logger.info("Rock-paper-scissors: bot won")
             persona_msg = self._get_persona_response("games", "lose")
             return f"{persona_msg or 'I won!'} I picked {bot_choice}, you picked {user_choice}."
     
@@ -113,6 +127,8 @@ class TsundereGames:
             'start_time': asyncio.get_event_loop().time()
         }
         
+        logger.info(f"Trivia game started for user {user_id}")
+        
         # Dramatic pause before asking
         await asyncio.sleep(TRIVIA_START_DELAY)
         
@@ -122,6 +138,7 @@ class TsundereGames:
     async def answer_trivia(self, user_id, answer):
         """Process trivia answer with timing"""
         if user_id not in self.active_games or self.active_games[user_id]['type'] != 'trivia':
+            logger.info(f"No active trivia game for user {user_id}")
             persona_msg = self._get_persona_response("games", "no_active_game")
             return f"{persona_msg or 'No active game.'} Start one with !trivia"
         
@@ -131,17 +148,23 @@ class TsundereGames:
         
         del self.active_games[user_id]
         
+        logger.info(f"Trivia answer for user {user_id}: answered '{answer}', correct is '{correct_answer}', time: {elapsed_time:.1f}s")
+        
         if elapsed_time > TRIVIA_TIMEOUT:
+            logger.info(f"Trivia answer timed out for user {user_id}")
             persona_msg = self._get_persona_response("games", "trivia_timeout", answer=correct_answer)
             return persona_msg or f"Time's up! The answer was {correct_answer}."
         
         if answer.lower().strip() == correct_answer:
             if elapsed_time < TRIVIA_FAST_THRESHOLD:
+                logger.info(f"User {user_id} answered trivia fast: {elapsed_time:.1f}s")
                 persona_msg = self._get_persona_response("games", "trivia_fast_correct", time=int(elapsed_time))
                 return persona_msg or f"Wow, {elapsed_time:.1f}s! Impressive!"
             else:
+                logger.info(f"User {user_id} answered trivia correctly: {elapsed_time:.1f}s")
                 persona_msg = self._get_persona_response("games", "trivia_correct", time=int(elapsed_time))
                 return persona_msg or f"Correct! You took {elapsed_time:.1f}s."
         else:
+            logger.info(f"User {user_id} answered trivia wrong")
             persona_msg = self._get_persona_response("games", "trivia_wrong", answer=correct_answer)
             return persona_msg or f"Wrong! The answer was {correct_answer}."

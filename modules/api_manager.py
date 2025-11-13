@@ -10,6 +10,10 @@ from typing import List, Optional
 import json
 from datetime import datetime, timedelta
 import concurrent.futures
+from .logger import BotLogger
+
+# Initialize logger
+logger = BotLogger.get_logger(__name__)
 
 # Constants for API management
 DEFAULT_RATE_LIMIT_PER_KEY = 60  # Requests per minute
@@ -65,6 +69,7 @@ class GeminiAPIManager:
             else:
                 break
         
+        logger.info(f"Loaded {len(self.api_keys)} Gemini API key(s)")
         print(f"🔑 Loaded {len(self.api_keys)} Gemini API key(s)")
     
     def _init_usage_tracking(self):
@@ -81,6 +86,7 @@ class GeminiAPIManager:
     def _configure_current_key(self):
         """Configure the current API key"""
         if not self.api_keys:
+            logger.error("No API keys available")
             raise ValueError("No API keys available")
         
         current_key = self.api_keys[self.current_key_index]
@@ -134,12 +140,14 @@ class GeminiAPIManager:
             
             if self._is_key_available(self.current_key_index):
                 rotation_time = time.time() - start_time
+                logger.info(f"API key rotated to #{self.current_key_index + 1} (took {rotation_time:.2f}s)")
                 print(f"🔄 Rotated to API key #{self.current_key_index + 1} (took {rotation_time:.2f}s)")
                 self._configure_current_key()
                 return True
         
         # No keys available, revert to original
         self.current_key_index = original_index
+        logger.warning("No available API keys for rotation")
         return False
     
     def _record_request(self, success: bool = True, error: str = None):
@@ -147,14 +155,18 @@ class GeminiAPIManager:
         usage = self.key_usage[self.current_key_index]
         usage['requests'] += 1
         
-        if not success:
+        if success:
+            logger.info(f"API request successful on key #{self.current_key_index + 1}")
+        else:
             usage['errors'] += 1
             usage['last_error'] = error
+            logger.error(f"API error on key #{self.current_key_index + 1}: {error}")
             
             # If too many errors, put key in cooldown
             if usage['errors'] >= ERROR_THRESHOLD:
                 cooldown_time = datetime.now() + timedelta(minutes=ERROR_COOLDOWN_DURATION)
                 self.key_cooldowns[self.current_key_index] = cooldown_time
+                logger.warning(f"API key #{self.current_key_index + 1} in cooldown due to {usage['errors']} errors")
                 print(f"⚠️ API key #{self.current_key_index + 1} in cooldown due to errors")
     
     async def generate_content(self, prompt: str, max_retries: int = MAX_RETRIES) -> Optional[str]:
@@ -180,7 +192,9 @@ class GeminiAPIManager:
                             await asyncio.sleep(2)
                             continue
                         else:
-                            raise Exception("All API keys are rate limited or in cooldown")
+                            error_msg = "All API keys are rate limited or in cooldown"
+                            logger.error(error_msg)
+                            raise Exception(error_msg)
                 
                 # Get current model and generate content
                 model = self.get_current_model()
@@ -197,12 +211,14 @@ class GeminiAPIManager:
                         
                         # Record successful request
                         self._record_request(success=True)
+                        logger.info("Content generation successful")
                         
                         return response.text
                         
                     except asyncio.TimeoutError:
                         error_msg = "Request timed out"
                         self._record_request(success=False, error=error_msg)
+                        logger.warning(f"API request timeout on key #{self.current_key_index + 1}")
                         last_error = error_msg
                         
                         # Try next key on timeout
@@ -220,6 +236,7 @@ class GeminiAPIManager:
                     # Put current key in cooldown and try next
                     cooldown_time = datetime.now() + timedelta(minutes=KEY_COOLDOWN_DURATION)
                     self.key_cooldowns[self.current_key_index] = cooldown_time
+                    logger.warning(f"API key #{self.current_key_index + 1} hit rate limit, cooling down")
                     print(f"⚠️ API key #{self.current_key_index + 1} hit rate limit, cooling down")
                     
                     if not self._rotate_to_next_key() and attempt < max_retries - 1:
@@ -236,6 +253,7 @@ class GeminiAPIManager:
                     break
         
         # All attempts failed
+        logger.error(f"All API attempts failed. Last error: {last_error}")
         print(f"❌ All API attempts failed. Last error: {last_error}")
         return None
     
@@ -247,6 +265,8 @@ class GeminiAPIManager:
             'keys': [],
             'status_json': json.dumps({'timestamp': datetime.now().isoformat()})
         }
+        
+        logger.info(f"API status: {len(self.api_keys)} keys, current: #{self.current_key_index + 1}")
         
         now = datetime.now()
         
@@ -288,6 +308,7 @@ class GeminiAPIManager:
             }
             self.key_cooldowns[key_index] = None
             
+            logger.info(f"Added new API key #{key_index + 1} (ID: {key_id})")
             print(f"➕ Added new API key #{key_index + 1} (ID: {key_id})")
             return True
         return False
@@ -296,12 +317,16 @@ class GeminiAPIManager:
         """Remove an API key from rotation"""
         if 0 <= key_index < len(self.api_keys):
             if len(self.api_keys) <= 1:
+                logger.error("Cannot remove the last API key")
                 raise ValueError("Cannot remove the last API key")
             
             # Remove key and associated data
             removed_key = self.api_keys.pop(key_index)
             removed_usage = self.key_usage.get(key_index, {})
-            print(f"🗑️ Removed API key #{key_index + 1} (ending in ...{removed_key[-8:]}) with {removed_usage.get('requests', 0)} requests and {removed_usage.get('errors', 0)} errors")
+            removal_msg = f"Removed API key #{key_index + 1} (ending in ...{removed_key[-8:]}) with {removed_usage.get('requests', 0)} requests and {removed_usage.get('errors', 0)} errors"
+            logger.info(removal_msg)
+            print(f"🗑️ {removal_msg}")
+            
             del self.key_usage[key_index]
             del self.key_cooldowns[key_index]
             if key_index in self.models:
@@ -314,7 +339,6 @@ class GeminiAPIManager:
             # Reindex remaining keys
             self._reindex_keys()
             
-            print(f"➖ Removed API key #{key_index + 1}")
             return True
         return False
     

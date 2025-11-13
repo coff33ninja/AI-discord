@@ -8,6 +8,10 @@ import re
 from urllib.parse import quote_plus, unquote
 from bs4 import BeautifulSoup
 from .persona_manager import PersonaManager
+from .logger import BotLogger
+
+# Initialize logger
+logger = BotLogger.get_logger(__name__)
 
 # Constants
 DUCKDUCKGO_API_URL = "https://api.duckduckgo.com/"
@@ -83,12 +87,15 @@ class TsundereSearch:
     def _validate_query(self, query):
         """Validate and sanitize search query"""
         if not query or not isinstance(query, str):
+            logger.warning("Invalid search query: query is None or not a string")
             return None
         
         query = query.strip()
         if len(query) == 0 or len(query) > 500:
+            logger.warning(f"Invalid search query: length {len(query)} out of bounds")
             return None
         
+        logger.debug(f"Query validation passed: '{query}'")
         return query
     
     def _validate_query(self, query):
@@ -106,6 +113,8 @@ class TsundereSearch:
         """Get AI analysis of search results with tsundere personality"""
         try:
             from .api_manager import GeminiAPIManager
+            
+            logger.info(f"Starting AI analysis for search query: '{query}'")
             
             # Create a prompt for AI analysis
             analysis_prompt = f"""You are Coffee, a tsundere AI assistant. A user searched for "{query}" and I found these search results:
@@ -130,6 +139,7 @@ Be informative but act annoyed about having to explain it. Include the most rele
                 api_manager = sys.modules['__main__'].api_manager
             else:
                 # Create a new API manager instance if not available
+                logger.debug("Creating new API manager for search analysis")
                 print("🔧 Creating new API manager for search analysis...")
                 api_manager = GeminiAPIManager()
             
@@ -137,14 +147,19 @@ Be informative but act annoyed about having to explain it. Include the most rele
                 ai_response = await api_manager.generate_content(analysis_prompt)
                 
                 if ai_response:
+                    logger.info(f"AI analysis generated successfully")
                     print(f"🤖 AI analysis generated: {ai_response[:100]}...")
                     return ai_response
+                else:
+                    logger.warning("AI analysis failed, using fallback")
             
             # Fallback if AI is not available
+            logger.info("AI analysis not available, using fallback response")
             print("⚠️ AI analysis not available, using fallback")
             return f"Here's what I found about **{query}**:\n\n{search_results}"
             
         except Exception as e:
+            logger.error(f"AI analysis error: {str(e)}")
             print(f"💥 AI analysis error: {e}")
             return f"Here's what I found about **{query}**:\n\n{search_results}"
     
@@ -164,66 +179,82 @@ Be informative but act annoyed about having to explain it. Include the most rele
         # Validate query
         query = self._validate_query(query)
         if not query:
+            logger.warning("Invalid or empty search query")
             return self._get_error_response(None, "Invalid or empty search query")
         
         try:
+            logger.info(f"Starting DuckDuckGo search: query='{query}', use_ai_analysis={use_ai_analysis}")
             print(f"🔍 Starting search for: {query} (AI: {use_ai_analysis})")
             session = await self._get_session()
             
             # Try DuckDuckGo Instant Answer API first
             encoded_query = quote_plus(query)
             url = f"{DUCKDUCKGO_API_URL}?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
+            logger.debug(f"DuckDuckGo API URL: {url}")
             print(f"🌐 Requesting: {url}")
             
             async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
+                logger.debug(f"API response status: {response.status}")
                 print(f"📡 Response status: {response.status}")
                 if response.status == 200:
                     data = await response.json()
+                    logger.debug(f"API response keys: {list(data.keys())}")
                     print(f"📊 Response keys: {list(data.keys())}")
                     
                     # Check for instant answer (highest priority)
                     if data.get('Answer'):
+                        logger.info("Found instant answer")
                         print("✅ Found instant answer")
                         return self._format_instant_answer(query, data)
                     
                     # Check for abstract (Wikipedia-like results)
                     elif data.get('Abstract'):
+                        logger.info("Found abstract")
                         print("✅ Found abstract")
                         return self._format_abstract(query, data)
                     
                     # Check for definition
                     elif data.get('Definition'):
+                        logger.info("Found definition")
                         print("✅ Found definition")
                         return self._format_definition(query, data)
                     
                     # Check for related topics
                     elif data.get('RelatedTopics'):
+                        logger.info(f"Found {len(data['RelatedTopics'])} related topics")
                         print(f"✅ Found {len(data['RelatedTopics'])} related topics")
                         return self._format_related_topics(query, data, max_results)
                     
                     else:
                         # No instant results - fall through to web search
+                        logger.info("No instant results, falling back to web search")
                         print("❌ No instant results, trying web search...")
                 
                 # If no instant results or API failed, try web search
+                logger.info("Performing web search with HTML parsing")
                 print("🌐 Performing web search with HTML parsing...")
                 web_results = await self._perform_web_search(query, max_results)
                 
                 if web_results:
                     if use_ai_analysis:
+                        logger.info("Getting AI analysis of web search results")
                         print("🤖 Getting AI analysis of search results...")
                         ai_analysis = await self._get_ai_search_analysis(query, web_results['raw'])
                         return ai_analysis
                     else:
+                        logger.info("Returning formatted web links")
                         print("📋 Returning formatted web links...")
                         return web_results['formatted']
                 else:
+                    logger.warning(f"No web search results found for: {query}")
                     return self._get_no_results_response(query)
                     
         except asyncio.TimeoutError:
+            logger.warning(f"Search timed out for query: {query}")
             print("⏰ Search timed out")
             return self._get_timeout_response(query)
         except Exception as e:
+            logger.error(f"Search error for query '{query}': {str(e)}")
             print(f"💥 Search error: {str(e)}")
             return self._get_error_response(query, str(e))
     
@@ -353,6 +384,7 @@ Be informative but act annoyed about having to explain it. Include the most rele
         Returns dict with 'raw' and 'formatted' keys for flexibility
         """
         try:
+            logger.info(f"Starting web search: {query}")
             print(f"🌐 Starting web search for: {query}")
             session = await self._get_session()
             
@@ -366,21 +398,27 @@ Be informative but act annoyed about having to explain it. Include the most rele
                 's': '0',  # Start from first result
             }
             
+            logger.debug(f"Web search URL: {search_url}")
             print(f"📡 Requesting web search: {search_url}")
             async with session.post(search_url, data=params, headers=DEFAULT_HEADERS, timeout=WEB_SEARCH_TIMEOUT) as response:
+                logger.debug(f"Web search response status: {response.status}")
                 print(f"📊 Web search response status: {response.status}")
                 if response.status == 200:
                     html = await response.text()
+                    logger.info(f"Web search HTML received: {len(html)} chars")
                     print(f"📄 Received HTML content ({len(html)} chars)")
                     return self._parse_search_results(query, html, max_results)
                 else:
+                    logger.warning(f"Bad web search response: {response.status}")
                     print(f"❌ Bad web search response: {response.status}")
                     return None
                     
         except asyncio.TimeoutError:
+            logger.warning(f"Web search timed out for: {query}")
             print("⏰ Web search timed out")
             return None
         except Exception as e:
+            logger.error(f"Web search error: {str(e)}")
             print(f"💥 Web search error: {str(e)}")
             return None
     
@@ -390,12 +428,14 @@ Be informative but act annoyed about having to explain it. Include the most rele
         Returns dict with 'formatted' (for link output) and 'raw' (for AI analysis)
         """
         try:
+            logger.info(f"Parsing search results for: {query}")
             soup = BeautifulSoup(html, 'html.parser')
             formatted_results = []
             raw_results = []
             
             # Find all result containers
             result_containers = soup.find_all('div', class_='result')
+            logger.debug(f"Found {len(result_containers)} result containers")
             
             for container in result_containers[:max_results]:
                 try:
@@ -436,10 +476,12 @@ Be informative but act annoyed about having to explain it. Include the most rele
                     raw_results.append(raw_text)
                     
                 except Exception as e:
+                    logger.warning(f"Error parsing individual result: {e}")
                     print(f"⚠️ Error parsing individual result: {e}")
                     continue
             
             if formatted_results:
+                logger.info(f"Successfully parsed {len(formatted_results)} search results")
                 formatted_text = "\n\n".join(formatted_results)
                 raw_text = "\n\n".join(raw_results)
                 
@@ -455,8 +497,10 @@ Be informative but act annoyed about having to explain it. Include the most rele
                     'raw': raw_text
                 }
             
+            logger.warning(f"No search results parsed for: {query}")
             return None
             
         except Exception as e:
+            logger.error(f"HTML parsing error: {e}")
             print(f"💥 HTML parsing error: {e}")
             return None 

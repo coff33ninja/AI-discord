@@ -5,6 +5,10 @@ import random
 import json
 import os
 from .persona_manager import PersonaManager
+from .logger import BotLogger
+
+# Initialize logger
+logger = BotLogger.get_logger(__name__)
 
 # Constants for relationship tracking
 USER_DATA_FILE = "user_relationships.json"
@@ -26,10 +30,14 @@ class TsundereSocial:
         if os.path.exists(self.user_data_file):
             try:
                 with open(self.user_data_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    logger.info(f"User data loaded: {len(data)} users")
+                    return data
             except (json.JSONDecodeError, IOError) as e:
+                logger.error(f"Error loading user data: {e}")
                 print(f"⚠️ Error loading user data: {e}")
                 return {}
+        logger.info("User data file not found, starting fresh")
         return {}
     
     def save_user_data(self):
@@ -37,7 +45,9 @@ class TsundereSocial:
         try:
             with open(self.user_data_file, 'w', encoding='utf-8') as f:
                 json.dump(self.user_data, f, indent=2)
+                logger.info(f"User data saved: {len(self.user_data)} users")
         except (IOError, OSError) as e:
+            logger.error(f"Error saving user data: {e}")
             print(f"⚠️ Error saving user data: {e}")
     
     def get_user_relationship(self, user_id):
@@ -68,6 +78,7 @@ class TsundereSocial:
         else:
             data['relationship_level'] = 'stranger'
         
+        logger.info(f"User {user_id} interaction updated: {interactions} interactions, level: {data['relationship_level']}")
         self.save_user_data()
         return data
     
