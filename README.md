@@ -25,6 +25,8 @@ Coffee has a classic tsundere personality:
 - **Timeout protection** for API calls (30-second limit)
 - **🆕 Multiple API Keys** - Automatic rotation for better reliability
 - **🆕 Rate Limit Handling** - Smart cooldown and retry logic
+- **🆕 Conversation Memory** - Remembers previous conversations for continuity
+- **🆕 Persistent Database** - SQLite storage for all AI interactions
 
 ### 🔍 **🆕 Web Search**
 - **DuckDuckGo Integration** - Search the web with tsundere attitude
@@ -50,6 +52,18 @@ Coffee has a classic tsundere personality:
 - **Personalized Responses**: Different reactions based on relationship level
 - **Persistent Data**: Saves relationship progress automatically
 
+### 🧠 **🆕 Memory System**
+- **Conversation History**: Remembers your previous chats for context
+- **User Preferences**: Learns your interests and adapts responses
+- **Memory Settings**: Customize how much Coffee remembers (1-10 messages)
+- **Smart Context**: References past conversations naturally
+
+### ⏰ **🆕 Time-Based Features**
+- **Reminders**: Set personal reminders with natural language
+- **Subscriptions**: Daily facts, jokes, weekly stats, mood check-ins
+- **Persistent Scheduling**: Reminders survive bot restarts
+- **Smart Notifications**: Tsundere-style pings and mentions
+
 ### 🛠️ **Server Management**
 - **Role Management**: Create, assign, and remove roles
 - **Channel Creation**: Text and voice channels
@@ -62,6 +76,7 @@ Coffee has a classic tsundere personality:
 - Python 3.8 or higher
 - Discord Bot Token
 - Google Gemini API Key
+- 🆕 SQLite (included with Python - no separate installation needed)
 
 ### Installation
 
@@ -79,7 +94,7 @@ pip install -r requirements.txt
 3. **Set up environment variables:**
 Create a `.env` file with:
 ```env
-DISCORD_TOKEN=your_discord_bot_token
+DISCORD_BOT_TOKEN=your_discord_bot_token
 GEMINI_API_KEY=your_gemini_api_key
 # 🆕 Optional: Additional API keys for rotation
 GEMINI_API_KEY_2=your_second_gemini_api_key
@@ -87,9 +102,20 @@ GEMINI_API_KEY_3=your_third_gemini_api_key
 OPENWEATHER_API_KEY=your_weather_api_key  # Optional
 ```
 
-4. **Run the bot:**
+4. **🆕 Database Setup:**
+The bot automatically creates its database on first run:
+- Creates `data/` directory
+- Initializes `ai_database.db` with all required tables
+- No manual database setup required!
+
+5. **Run the bot:**
 ```bash
 python bot.py
+```
+
+**🆕 Development Mode (Auto-restart):**
+```bash
+python dev_bot.py
 ```
 
 ## 🎯 Commands
@@ -97,11 +123,12 @@ python bot.py
 ### 🤖 **AI & Social**
 | Command | Description | Example |
 |---------|-------------|---------|
-| `!ai <question>` | Ask Coffee anything | `!ai What's the weather like?` |
+| `!ai <question>` | Ask Coffee anything (with memory!) | `!ai What's the weather like?` |
 | `!help_ai` | Show all commands | `!help_ai` |
 | `!compliment` | Compliment Coffee (watch her get flustered!) | `!compliment` |
 | `!mood` | Check Coffee's current mood | `!mood` |
 | `!relationship` | See your friendship level | `!relationship` |
+| `!memory [number]` | 🆕 View/adjust conversation memory | `!memory 8` |
 
 ### 🔍 **🆕 Search**
 | Command | Description | Example |
@@ -117,9 +144,10 @@ python bot.py
 | `!dice [sides]` | Roll dice (default 6 sides) | `!dice 20` |
 | `!flip` | Flip a coin | `!flip` |
 | `!weather <city>` | Real weather data | `!weather Tokyo` |
-| `!fact` | Random interesting facts | `!fact` |
-| `!joke` | Random jokes | `!joke` |
+| `!fact` | Random interesting facts (personalized!) | `!fact` |
+| `!joke` | Random jokes (learns your humor!) | `!joke` |
 | `!catfact` | Cat facts (she loves these) | `!catfact` |
+| `!stats` | 🆕 Your personal usage statistics | `!stats` |
 
 ### 🎮 **Games**
 | Command | Description | Example |
@@ -142,11 +170,22 @@ python bot.py
 | `!create_channel <name> [type]` | Create channel | `!create_channel general text` |
 | `!send_to #channel <msg>` | Send message | `!send_to #general Hello!` |
 
+### ⏰ **🆕 Time & Reminders**
+| Command | Description | Example |
+|---------|-------------|---------|
+| `!remind <time> to <message>` | Set a reminder | `!remind in 5 minutes to take a break` |
+| `!reminders` | List your active reminders | `!reminders` |
+| `!cancelreminder <id>` | Cancel a specific reminder | `!cancelreminder 123` |
+| `!subscribe <feature>` | Subscribe to daily features | `!subscribe daily_fact` |
+| `!unsubscribe <feature>` | Unsubscribe from features | `!unsubscribe daily_joke` |
+| `!subscriptions` | List your subscriptions | `!subscriptions` |
+
 ### ⚙️ **Admin Commands** *(admin only)*
 | Command | Description | Example |
 |---------|-------------|---------|
 | `!reload_persona` | Reload personality config | `!reload_persona` |
-| `!api_status` | 🆕 Check API key status and usage | `!api_status` |
+| `!api_status` | Check API key status and usage | `!api_status` |
+| `!ai_analytics [days]` | 🆕 View AI usage analytics | `!ai_analytics 7` |
 | `!shutdown` / `!kill` / `!stop` | Shutdown bot | `!shutdown` |
 | `!restart` / `!reboot` | Restart bot | `!restart` |
 
@@ -156,23 +195,33 @@ python bot.py
 User: !ai What's 2+2?
 Coffee: Ugh, seriously? It's 4, you baka! Don't ask me such obvious questions!
 
+User: !ai Do you remember what I just asked?
+Coffee: Of course I remember, idiot! You asked about 2+2 and I told you it was 4! 
+       It's not like I pay attention to everything you say or anything...
+
 User: @Coffee hello
 Coffee: W-what?! Don't just mention me randomly, idiot!
 
-User: !compliment
-Coffee: B-baka! Don't say weird stuff like that! I'm just doing my job, okay?!
+User: !remind in 30 minutes to check the oven
+Coffee: Ugh, fine! I'll remind you about 'check the oven' at 3:30 PM on November 13. 
+        Don't blame me if you forget anyway, baka! (Reminder ID: 1)
 
-User: !weather Tokyo
-Coffee: Ugh, fine! It's 22°C in Tokyo with clear skies. Feels like 24°C... Don't blame me if you get cold, baka!
+User: !memory 10
+Coffee: Fine! Your memory is now set to 10 messages. It's not like I wanted to 
+        remember more of our conversations or anything, baka!
 
-User: !search ESP32
-Coffee: Fine, here are some results for ESP32:
-• ESP32 Overview | Espressif Systems
-  🔗 https://www.espressif.com/en/products/socs/esp32
-  📝 ESP32 is a series of low-cost, low-power system on a chip microcontrollers...
+User: !stats
+Coffee: 📊 Your Chat Statistics:
+        **Total Conversations:** 47
+        **Days Active:** 3
+        **Average per Day:** 15.7
+        **Most Used Commands:**
+        • ai: 23 times
+        • joke: 8 times
+        • weather: 5 times
 
-User: !relationship (after 50+ interactions)
-Coffee: You're... you're actually really great, okay?! Don't make a big deal about it!
+User: !subscribe daily_fact
+Coffee: ✅ Fine! You're now subscribed to daily facts. Don't expect me to be excited about it!
 ```
 
 ## 🔑 API Keys Setup
@@ -197,21 +246,29 @@ Coffee: You're... you're actually really great, okay?! Don't make a big deal abo
 ```
 AI-discord/
 ├── bot.py                    # Main bot application
+├── dev_bot.py               # Development runner with auto-restart
 ├── .env                      # Environment variables (create this)
 ├── requirements.txt          # Python dependencies
 ├── persona_card.json         # Coffee's personality configuration
 ├── user_relationships.json   # Auto-generated user data
 ├── README.md                 # This file
+├── data/                     # 🆕 Database storage directory
+│   └── ai_database.db       # 🆕 SQLite database (auto-created)
 └── modules/
     ├── __init__.py          # Module initialization
     ├── persona_manager.py   # Centralized personality system
     ├── personality.py       # Tsundere personality responses
-    ├── api_manager.py       # 🆕 Gemini API key rotation system
-    ├── search.py            # 🆕 DuckDuckGo search integration
-    ├── utilities.py         # API utilities (weather, facts, etc.)
+    ├── api_manager.py       # Gemini API key rotation system
+    ├── search.py            # DuckDuckGo search integration
+    ├── utilities.py         # 🆕 Memory-aware API utilities
     ├── games.py            # Interactive games
     ├── social.py           # Relationship tracking system
-    └── server_actions.py   # Server management commands
+    ├── server_actions.py   # Server management commands
+    ├── ai_database.py      # 🆕 Async SQLite database for AI data
+    ├── time_utilities.py   # 🆕 Reminders and time-based features
+    ├── config_manager.py   # Configuration management
+    ├── response_handler.py # Response formatting utilities
+    └── logger.py           # Logging system
 ```
 
 ## 💝 Relationship System
@@ -303,7 +360,32 @@ Coffee handles errors gracefully with tsundere flair:
 
 ## 🆕 New Features in Latest Update
 
-### � Web Search Integration
+### 🧠 AI Memory System
+- **Conversation Memory** - Coffee remembers your previous chats for natural continuity
+- **User Preferences** - Learns your interests and adapts responses accordingly
+- **Memory Settings** - Customize memory length (1-10 messages) with `!memory`
+- **Smart Context** - References past conversations naturally in responses
+- **Persistent Storage** - All conversations saved to SQLite database
+
+### ⏰ Time-Based Features
+- **Smart Reminders** - Set reminders with natural language: `!remind in 5 minutes to take a break`
+- **Subscription System** - Subscribe to daily facts, jokes, weekly stats, mood check-ins
+- **Persistent Scheduling** - Reminders survive bot restarts and are restored automatically
+- **Tsundere Notifications** - All reminders delivered with Coffee's signature attitude
+
+### 🗄️ Advanced Database System
+- **SQLite Integration** - Async database for all AI interactions and user data
+- **Conversation Tracking** - Complete history of all AI conversations with metadata
+- **Performance Analytics** - Track model usage, response times, and success rates
+- **User Analytics** - Personal usage statistics and interaction patterns
+
+### 🧠 Memory-Aware Utilities
+- **Personalized Weather** - Remembers your favorite locations
+- **Adaptive Jokes** - Learns your humor preferences from reactions
+- **Contextual Facts** - Delivers facts based on your interests
+- **Smart Responses** - All utilities now consider your conversation history
+
+### 🔍 Web Search Integration
 - **DuckDuckGo Search** - Search the web with `!search` command
 - **Instant Answers** - Quick facts, calculations, and definitions
 - **Smart Parsing** - BeautifulSoup-powered result extraction
@@ -316,9 +398,10 @@ Coffee handles errors gracefully with tsundere flair:
 - **Admin Dashboard** - Real-time status with `!api_status`
 
 ### 🛠️ Enhanced Architecture
-- **Modular Design** - Clean separation of concerns
+- **Modular Design** - Clean separation of concerns with specialized modules
 - **Robust Error Handling** - Graceful degradation on failures
-- **Production Ready** - Professional-grade HTML parsing and API management
+- **Production Ready** - Professional-grade database management and API handling
+- **Memory Integration** - All systems now work together for personalized experiences
 
 ## 🤝 Contributing
 
