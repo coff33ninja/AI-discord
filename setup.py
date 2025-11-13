@@ -121,33 +121,53 @@ def install_python_3_12():
 def install_uv():
     """Install uv package manager"""
     print("\n📦 Installing uv package manager...")
+    
+    # First check if we're already in a uv-managed environment
+    # (e.g., Python 3.12 installed via uv)
     try:
-        # First try to install uv via pip
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "uv"])
-        print("✅ uv installed successfully!")
-        return True
-    except subprocess.CalledProcessError as e:
-        # Check if it's because the environment is managed by uv
-        if "externally-managed-environment" in str(e) or "managed by uv" in str(e):
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "uv"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode == 0:
+            print("✅ uv installed successfully!")
+            return True
+        
+        # Check the error message
+        error_output = result.stderr + result.stdout
+        if "externally-managed-environment" in error_output or "managed by uv" in error_output:
             print("⚠️  This Python is managed by uv (can't install via pip)")
             print("✅ uv should already be available in this environment")
             return True
         
-        print("⚠️  Failed to install uv via pip, attempting alternative installation...")
-        try:
-            # Try using pip's --user flag
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "uv"])
+    except Exception as e:
+        error_str = str(e)
+        if "externally-managed-environment" in error_str or "managed by uv" in error_str:
+            print("⚠️  This Python is managed by uv (can't install via pip)")
+            print("✅ uv should already be available in this environment")
+            return True
+    
+    print("⚠️  Failed to install uv via pip, attempting alternative installation...")
+    try:
+        # Try using pip's --user flag
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--user", "uv"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode == 0:
             print("✅ uv installed successfully (user mode)!")
             return True
-        except subprocess.CalledProcessError:
-            print("❌ Failed to install uv!")
-            print("   Please install uv manually: https://github.com/astral-sh/uv")
-            return False
-    except Exception as e:
-        # If there's any other error, assume uv might already be available
-        print(f"⚠️  Error during uv installation: {e}")
-        print("   Assuming uv is already available...")
-        return True
+    except Exception:
+        pass
+    
+    print("⚠️  Could not install uv via pip")
+    print("   If this Python was installed via uv, it should already be available")
+    print("   Otherwise, please install uv manually: https://github.com/astral-sh/uv")
+    return True  # Return True since uv might already be available
 
 def check_uv_installed():
     """Check if uv is installed and accessible"""
