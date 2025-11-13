@@ -186,6 +186,10 @@ async def ask_gemini(ctx, *, question):
                 logger.info(f"Retrieved {len(conversation_history)} previous conversations for context")
                 if conversation_history:
                     print(f"🧠 Memory: Found {len(conversation_history)} previous conversations")
+                    # Debug: Show what conversations were found
+                    for i, conv in enumerate(conversation_history[-2:]):
+                        print(f"🧠 Memory {i+1}: User: {conv['message_content'][:50]}...")
+                        print(f"🧠 Memory {i+1}: Bot: {conv['ai_response'][:50]}...")
                 else:
                     print("🧠 Memory: No previous conversations found")
             except Exception as e:
@@ -357,6 +361,14 @@ def create_memory_enhanced_prompt(question, username, conversation_history):
         f'USER QUESTION: {question}',
         f'{context_text}\nUSER QUESTION: {question}'
     )
+    
+    # Debug: Check if replacement worked
+    if context_text in enhanced_prompt:
+        print("🧠 Memory: Context successfully added to prompt")
+    else:
+        print("🧠 Memory: WARNING - Context not found in enhanced prompt")
+        print(f"🧠 Memory: Looking for: 'USER QUESTION: {question}'")
+        print(f"🧠 Memory: Base prompt preview: {base_prompt[:200]}...")
     
     return enhanced_prompt
 

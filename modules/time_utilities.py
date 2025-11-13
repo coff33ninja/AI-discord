@@ -45,10 +45,16 @@ class TimeBasedUtilities:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     is_active BOOLEAN DEFAULT TRUE,
                     is_recurring BOOLEAN DEFAULT FALSE,
-                    recurrence_pattern TEXT,
-                    INDEX idx_remind_time (remind_time),
-                    INDEX idx_user_active (user_id, is_active)
+                    recurrence_pattern TEXT
                 )
+            """)
+            
+            # Create indexes for reminders table
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_remind_time ON user_reminders (remind_time)
+            """)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_user_active ON user_reminders (user_id, is_active)
             """)
             
             # User subscriptions for time-based features
