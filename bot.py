@@ -118,12 +118,19 @@ async def on_ready():
     logger.info(f"API manager initialized: {status['total_keys']} keys, current key #{status['current_key']}")
     print(f"🔑 Using {status['total_keys']} API key(s), currently on key #{status['current_key']}")
     
-    # Set bot status with fallback
+    # Set bot status with fallback using dynamic bot name
     try:
-        status_text = persona_manager.persona.get("activity_responses", {}).get("bot_status", "Ready to help! | Use !help_ai for commands")
+        bot_name = persona_manager.get_name()
+        status_template = persona_manager.persona.get("activity_responses", {}).get("bot_status", "{bot_name} ready to help! | Use !help_ai for commands")
+        # If the status template doesn't contain {bot_name}, use it as-is for backward compatibility
+        if "{bot_name}" in status_template:
+            status_text = status_template.format(bot_name=bot_name)
+        else:
+            status_text = status_template
     except Exception:
         # Fallback if persona manager fails
-        status_text = "Ready to help! | Use !help_ai for commands"
+        bot_name = "Discord AI"  # Fallback name
+        status_text = f"{bot_name} ready to help! | Use !help_ai for commands"
     
     await bot.change_presence(activity=discord.Game(name=status_text))
 
@@ -384,14 +391,16 @@ async def help_command(ctx):
     # Get help command configuration with fallbacks
     try:
         help_config = persona_manager.persona.get("activity_responses", {}).get("help_command", {})
+        bot_name = persona_manager.get_name()
     except Exception:
         help_config = {}
+        bot_name = "Discord AI"
     
-    # Ensure we have fallback values for all help config fields
+    # Ensure we have fallback values for all help config fields with dynamic bot name
     help_config = {
-        "title": help_config.get("title", "Available Commands"),
-        "description": help_config.get("description", "Here are the commands I can help you with:"),
-        "footer": help_config.get("footer", "Use these commands to interact with me!")
+        "title": help_config.get("title", f"{bot_name} - Available Commands"),
+        "description": help_config.get("description", f"Here are the commands you can use with {bot_name}:"),
+        "footer": help_config.get("footer", f"Use these commands to interact with {bot_name}!")
     }
     
     # Use ResponseHandler to create a formatted embed
@@ -1075,29 +1084,73 @@ async def reload_persona(ctx):
     
     if ctx.author.guild_permissions.administrator:
         logger.info(f"Admin permission verified for user {ctx.author.id}")
-        result = personality.reload_persona()
-        logger.info(f"Persona reloaded: {result}")
+        
+        # Store old name for comparison
+        old_name = persona_manager.get_name()
+        
+        # Reload persona (this also reloads the bot name service)
+        try:
+            result = persona_manager.reload_persona()
+            logger.info(f"Persona reloaded: {result}")
+            
+            # Check if name changed and update Discord presence
+            new_name = persona_manager.get_name()
+            if old_name != new_name:
+                logger.info(f"Bot name changed from '{old_name}' to '{new_name}', updating presence")
+                try:
+                    # Update bot status with new name
+                    bot_name = new_name
+                    status_template = persona_manager.persona.get("activity_responses", {}).get("bot_status", "{bot_name} ready to help! | Use !help_ai for commands")
+                    if "{bot_name}" in status_template:
+                        status_text = status_template.format(bot_name=bot_name)
+                    else:
+                        status_text = status_template
+                    await bot.change_presence(activity=discord.Game(name=status_text))
+                    logger.info(f"Discord presence updated with new name: {new_name}")
+                except Exception as e:
+                    logger.error(f"Failed to update Discord presence: {e}")
+                    # Don't fail the whole reload if presence update fails
+            
+        except Exception as e:
+            logger.error(f"Failed to reload persona: {e}")
+            # Maintain previous functionality even if reload fails
+            result = f"Reload failed: {str(e)}, using previous configuration"
+            new_name = old_name  # Keep the old name if reload failed
         
         # Get user relationship for personalized response
         user_data = social.get_user_relationship(ctx.author.id)
         relationship_level = user_data['relationship_level']
         
         # Generate AI response for reload command
-        prompt = persona_manager.create_ai_prompt(
-            f"!reload_persona command (result: {result})", ctx.author.display_name, relationship_level
-        )
-        response = await api_manager.generate_content(prompt)
-        
-        if response:
-            await ctx.send(response)
-        else:
-            # Fallback to persona card response
-            logger.warning("AI response failed for reload_persona, using fallback")
-            try:
-                fallback = persona_manager.get_activity_response("admin", "reload_success", result=result)
-            except Exception:
-                fallback = f"Configuration reloaded successfully: {result}"
-            await ctx.send(fallback)
+        try:
+            prompt = persona_manager.create_ai_prompt(
+                f"!reload_persona command (result: {result})", ctx.author.display_name, relationship_level
+            )
+            response = await api_manager.generate_content(prompt)
+            
+            if response:
+                await ctx.send(response)
+            else:
+                # Fallback to persona card response
+                logger.warning("AI response failed for reload_persona, using fallback")
+                try:
+                    if "failed" in result.lower():
+                        fallback = f"❌ {result}"
+                    else:
+                        fallback = persona_manager.get_activity_response("admin", "reload_success", result=result)
+                except Exception:
+                    if "failed" in result.lower():
+                        fallback = f"❌ {result}"
+                    else:
+                        fallback = f"✅ Configuration reloaded successfully: {result}"
+                await ctx.send(fallback)
+        except Exception as e:
+            logger.error(f"Error generating reload response: {e}")
+            # Ultimate fallback
+            if "failed" in result.lower():
+                await ctx.send(f"❌ {result}")
+            else:
+                await ctx.send(f"✅ Configuration reloaded: {result}")
     else:
         logger.warning(f"Non-admin user {ctx.author.id} attempted reload_persona command")
         # Generate AI response for no permission
@@ -1479,7 +1532,12 @@ if __name__ == '__main__':
             asyncio.run(ai_db.close())
         if 'search' in globals() and search:
             asyncio.run(search.close_session())
-        print('👋 Akino is shutting down... Goodbye!')
+        # Get bot name for shutdown message
+        try:
+            bot_name = persona_manager.get_name() if 'persona_manager' in globals() else "Discord AI"
+        except:
+            bot_name = "Discord AI"
+        print(f'👋 {bot_name} is shutting down... Goodbye!')
         sys.exit(0)
     
     # Register signal handler for graceful shutdown
@@ -1503,7 +1561,12 @@ if __name__ == '__main__':
             asyncio.run(ai_db.close())
         if 'search' in globals() and search:
             asyncio.run(search.close_session())
-        print('👋 Akino is shutting down... Goodbye!')
+        # Get bot name for shutdown message
+        try:
+            bot_name = persona_manager.get_name() if 'persona_manager' in globals() else "Discord AI"
+        except:
+            bot_name = "Discord AI"
+        print(f'👋 {bot_name} is shutting down... Goodbye!')
     except Exception as e:
         print(f'❌ Bot crashed: {e}')
         # Save any pending data and cleanup

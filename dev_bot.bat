@@ -1,6 +1,6 @@
 @echo off
-title Akino - Development Mode
-echo Akino - Tsundere AI Discord Bot (Development Mode)
+title Discord AI Bot - Development Mode
+echo Discord AI Bot - Development Mode
 echo.
 echo This will auto-restart the bot when you make changes to .py files
 echo Press Ctrl+C to stop

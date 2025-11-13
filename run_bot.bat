@@ -1,6 +1,6 @@
 @echo off
-title Akino - Tsundere AI Discord Bot
-echo Starting Akino - Tsundere AI Discord Bot...
+title Discord AI Bot
+echo Starting Discord AI Bot...
 echo.
 echo Commands:
 echo - Press Ctrl+C to stop the bot

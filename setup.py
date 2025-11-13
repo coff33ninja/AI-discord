@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Setup script for Akino - Tsundere AI Discord Bot
+Setup script for Discord AI Bot
 Uses uv for fast, reliable package management
 """
 
@@ -160,7 +160,7 @@ def setup_env_file():
 
 def main():
     """Main setup function"""
-    print("🤖 Akino - Tsundere AI Discord Bot Setup")
+    print("🤖 Discord AI Bot Setup")
     print("=" * 50)
     print("Using uv for fast, reliable package management\n")
     

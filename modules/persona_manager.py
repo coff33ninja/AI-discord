@@ -3,6 +3,7 @@ Persona Manager - Centralized personality system using persona cards
 """
 import json
 import random
+from .bot_name_service import BotNameService
 
 # Constants for persona management
 DEFAULT_PERSONA_FILE = "persona_card.json"
@@ -15,6 +16,8 @@ class PersonaManager:
     def __init__(self, persona_file="persona_card.json"):
         self.persona_file = persona_file
         self.persona = self.load_persona()
+        # Initialize bot name service with the same persona file
+        self.bot_name_service = BotNameService(persona_file)
     
     def load_persona(self):
         """Load persona card from JSON file"""
@@ -270,8 +273,8 @@ class PersonaManager:
         }
     
     def get_name(self):
-        """Get persona name"""
-        return self.persona.get("name", DEFAULT_PERSONA_NAME)
+        """Get persona name using the bot name service"""
+        return self.bot_name_service.get_bot_name()
     
     def get_ai_prompt(self, user_question, relationship_level="stranger"):
         """Generate AI system prompt with full persona card context"""
@@ -484,4 +487,11 @@ Generate an authentic response as the character described in the persona card.""
     def reload_persona(self):
         """Reload persona from file (useful for live updates)"""
         self.persona = self.load_persona()
-        return f"Persona reloaded: {self.get_name()}"
+        # Also reload the bot name service
+        name_reload_success = self.bot_name_service.reload_bot_name()
+        bot_name = self.get_name()
+        
+        if name_reload_success:
+            return f"Persona reloaded: {bot_name}"
+        else:
+            return f"Persona reloaded: {bot_name} (name reload had issues, check logs)"
