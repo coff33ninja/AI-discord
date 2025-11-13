@@ -1,6 +1,6 @@
-# Coffee - Tsundere AI Discord Bot 🤖💕
+# Akino - Tsundere AI Discord Bot 🤖💕
 
-A Discord bot with a classic tsundere personality powered by Google's Gemini AI. Meet Coffee - she's helpful but acts annoyed about it, uses mild swearing, and gets adorably flustered when complimented!
+A Discord bot with a classic tsundere personality powered by Google's Gemini AI. Meet Akino - she's helpful but acts annoyed about it, uses mild swearing, and gets adorably flustered when complimented!
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Discord.py](https://img.shields.io/badge/discord.py-2.3.2-blue.svg)
@@ -9,7 +9,7 @@ A Discord bot with a classic tsundere personality powered by Google's Gemini AI.
 
 ## 🎭 Personality
 
-Coffee has a classic tsundere personality:
+Akino has a classic tsundere personality:
 - **Reluctant Helper**: Acts annoyed while being genuinely helpful
 - **Defensive**: Gets flustered easily, especially with compliments
 - **Caring but Denying**: Obviously cares but refuses to admit it
@@ -55,7 +55,7 @@ Coffee has a classic tsundere personality:
 ### 🧠 **🆕 Memory System**
 - **Conversation History**: Remembers your previous chats for context
 - **User Preferences**: Learns your interests and adapts responses
-- **Memory Settings**: Customize how much Coffee remembers (1-10 messages)
+- **Memory Settings**: Customize how much Akino remembers (1-10 messages)
 - **Smart Context**: References past conversations naturally
 
 ### ⏰ **🆕 Time-Based Features**
@@ -123,10 +123,10 @@ python dev_bot.py
 ### 🤖 **AI & Social**
 | Command | Description | Example |
 |---------|-------------|---------|
-| `!ai <question>` | Ask Coffee anything (with memory!) | `!ai What's the weather like?` |
+| `!ai <question>` | Ask Akino anything (with memory!) | `!ai What's the weather like?` |
 | `!help_ai` | Show all commands | `!help_ai` |
-| `!compliment` | Compliment Coffee (watch her get flustered!) | `!compliment` |
-| `!mood` | Check Coffee's current mood | `!mood` |
+| `!compliment` | Compliment Akino (watch her get flustered!) | `!compliment` |
+| `!mood` | Check Akino's current mood | `!mood` |
 | `!relationship` | See your friendship level | `!relationship` |
 | `!memory [number]` | 🆕 View/adjust conversation memory | `!memory 8` |
 
@@ -193,25 +193,25 @@ python dev_bot.py
 
 ```
 User: !ai What's 2+2?
-Coffee: Ugh, seriously? It's 4, you baka! Don't ask me such obvious questions!
+Akino: Ugh, seriously? It's 4, you baka! Don't ask me such obvious questions!
 
 User: !ai Do you remember what I just asked?
-Coffee: Of course I remember, idiot! You asked about 2+2 and I told you it was 4! 
+Akino: Of course I remember, idiot! You asked about 2+2 and I told you it was 4! 
        It's not like I pay attention to everything you say or anything...
 
-User: @Coffee hello
-Coffee: W-what?! Don't just mention me randomly, idiot!
+User: @Akino hello
+Akino: W-what?! Don't just mention me randomly, idiot!
 
 User: !remind in 30 minutes to check the oven
-Coffee: Ugh, fine! I'll remind you about 'check the oven' at 3:30 PM on November 13. 
+Akino: Ugh, fine! I'll remind you about 'check the oven' at 3:30 PM on November 13. 
         Don't blame me if you forget anyway, baka! (Reminder ID: 1)
 
 User: !memory 10
-Coffee: Fine! Your memory is now set to 10 messages. It's not like I wanted to 
+Akino: Fine! Your memory is now set to 10 messages. It's not like I wanted to 
         remember more of our conversations or anything, baka!
 
 User: !stats
-Coffee: 📊 Your Chat Statistics:
+Akino: 📊 Your Chat Statistics:
         **Total Conversations:** 47
         **Days Active:** 3
         **Average per Day:** 15.7
@@ -221,7 +221,7 @@ Coffee: 📊 Your Chat Statistics:
         • weather: 5 times
 
 User: !subscribe daily_fact
-Coffee: ✅ Fine! You're now subscribed to daily facts. Don't expect me to be excited about it!
+Akino: ✅ Fine! You're now subscribed to daily facts. Don't expect me to be excited about it!
 ```
 
 ## 🔑 API Keys Setup
@@ -249,7 +249,7 @@ AI-discord/
 ├── dev_bot.py               # Development runner with auto-restart
 ├── .env                      # Environment variables (create this)
 ├── requirements.txt          # Python dependencies
-├── persona_card.json         # Coffee's personality configuration
+├── persona_card.json         # Akino's personality configuration
 ├── user_relationships.json   # Auto-generated user data
 ├── README.md                 # This file
 ├── data/                     # 🆕 Database storage directory
@@ -273,7 +273,7 @@ AI-discord/
 
 ## 💝 Relationship System
 
-Coffee remembers every user and builds relationships over time:
+Akino remembers every user and builds relationships over time:
 
 | Level | Interactions | Behavior |
 |-------|-------------|----------|
@@ -333,7 +333,7 @@ Ensure your bot has these Discord permissions:
 
 ## 🎨 Customization
 
-Coffee's personality is fully customizable through `persona_card.json`:
+Akino's personality is fully customizable through `persona_card.json`:
 - **Response templates** for different situations
 - **Speech patterns** and common phrases
 - **Relationship-specific** responses
@@ -351,7 +351,7 @@ Coffee's personality is fully customizable through `persona_card.json`:
 6. **Permission errors**: Ensure bot has required server permissions
 
 ### Error Handling
-Coffee handles errors gracefully with tsundere flair:
+Akino handles errors gracefully with tsundere flair:
 - API timeouts (30-second limit)
 - 🆕 Automatic API key rotation on failures
 - Missing permissions
@@ -361,7 +361,7 @@ Coffee handles errors gracefully with tsundere flair:
 ## 🆕 New Features in Latest Update
 
 ### 🧠 AI Memory System
-- **Conversation Memory** - Coffee remembers your previous chats for natural continuity
+- **Conversation Memory** - Akino remembers your previous chats for natural continuity
 - **User Preferences** - Learns your interests and adapts responses accordingly
 - **Memory Settings** - Customize memory length (1-10 messages) with `!memory`
 - **Smart Context** - References past conversations naturally in responses
@@ -371,7 +371,7 @@ Coffee handles errors gracefully with tsundere flair:
 - **Smart Reminders** - Set reminders with natural language: `!remind in 5 minutes to take a break`
 - **Subscription System** - Subscribe to daily facts, jokes, weekly stats, mood check-ins
 - **Persistent Scheduling** - Reminders survive bot restarts and are restored automatically
-- **Tsundere Notifications** - All reminders delivered with Coffee's signature attitude
+- **Tsundere Notifications** - All reminders delivered with Akino's signature attitude
 
 ### 🗄️ Advanced Database System
 - **SQLite Integration** - Async database for all AI interactions and user data
@@ -405,13 +405,13 @@ Coffee handles errors gracefully with tsundere flair:
 
 ## 🚀 Future Plans & Roadmap
 
-Coffee is constantly evolving! Here are some exciting features planned for future updates:
+Akino is constantly evolving! Here are some exciting features planned for future updates:
 
 ### 🎵 **Voice Integration**
-- **Text-to-Speech** - Hear Coffee's tsundere voice with customizable voice models
-- **Voice Commands** - Talk to Coffee directly in voice channels
+- **Text-to-Speech** - Hear Akino's tsundere voice with customizable voice models
+- **Voice Commands** - Talk to Akino directly in voice channels
 - **Voice Reactions** - Tsundere audio responses to voice interactions
-- **Music Bot Integration** - Coffee can play music while being embarrassed about it
+- **Music Bot Integration** - Akino can play music while being embarrassed about it
 - **Voice Reminders** - Audio notifications for your reminders
 
 ### 🎨 **Visual Enhancements**
@@ -423,13 +423,13 @@ Coffee is constantly evolving! Here are some exciting features planned for futur
 
 ### 🧠 **Advanced AI Features**
 - **Emotion Recognition** - Detect user mood from messages and adapt responses
-- **Learning Conversations** - Coffee learns your communication style over time
+- **Learning Conversations** - Akino learns your communication style over time
 - **Multi-Language Support** - Tsundere responses in different languages
 - **Context Awareness** - Understanding of ongoing conversations across channels
-- **Personality Evolution** - Coffee's personality develops based on server culture
+- **Personality Evolution** - Akino's personality develops based on server culture
 
 ### 🎮 **Enhanced Gaming**
-- **RPG Elements** - Level up your relationship with Coffee through adventures
+- **RPG Elements** - Level up your relationship with Akino through adventures
 - **Mini-Games Collection** - Puzzle games, word games, and challenges
 - **Multiplayer Games** - Server-wide games and competitions
 - **Achievement System** - Unlock special responses and features
@@ -450,7 +450,7 @@ Coffee is constantly evolving! Here are some exciting features planned for futur
 - **Export Tools** - Download your conversation history and statistics
 
 ### 🔧 **Quality of Life**
-- **Mobile App** - Dedicated mobile interface for Coffee interactions
+- **Mobile App** - Dedicated mobile interface for Akino interactions
 - **Web Dashboard** - Browser-based control panel for settings and analytics
 - **Backup & Sync** - Cloud backup of your relationship data
 - **Custom Triggers** - Create your own automated responses and actions
@@ -460,35 +460,35 @@ Coffee is constantly evolving! Here are some exciting features planned for futur
 - **Multiple Personas** - Switch between different character types
 - **Seasonal Events** - Special holiday personalities and responses
 - **Mood Variations** - Different tsundere intensities based on time/events
-- **Character Development** - Coffee's personality grows more complex over time
-- **Interactive Backstory** - Discover Coffee's history through conversations
+- **Character Development** - Akino's personality grows more complex over time
+- **Interactive Backstory** - Discover Akino's history through conversations
 
 ### 🛡️ **Moderation & Safety**
 - **Smart Moderation** - AI-powered content filtering with personality
 - **Anti-Spam Protection** - Tsundere responses to spam attempts
-- **User Reporting** - Easy reporting system with Coffee as mediator
+- **User Reporting** - Easy reporting system with Akino as mediator
 - **Parental Controls** - Family-friendly mode with adjusted personality
 - **Privacy Controls** - Granular control over data collection and usage
 
 ### 🌟 **Community Features**
 - **Server Leaderboards** - Relationship rankings and achievements
-- **Coffee Cafés** - Special channels for Coffee enthusiasts
-- **User Testimonials** - Share your favorite Coffee moments
+- **Akino Cafés** - Special channels for Akino enthusiasts
+- **User Testimonials** - Share your favorite Akino moments
 - **Community Events** - Server-wide activities and celebrations
 - **Beta Testing Program** - Early access to new features
 
 ### 🔮 **Experimental Features**
-- **AR Integration** - Augmented reality Coffee interactions
+- **AR Integration** - Augmented reality Akino interactions
 - **Blockchain Integration** - NFT achievements and collectibles (if there's demand)
 - **AI Art Generation** - Custom tsundere artwork based on conversations
-- **Dream Journal** - Coffee remembers and discusses your shared "dreams"
+- **Dream Journal** - Akino remembers and discusses your shared "dreams"
 - **Time Capsules** - Messages that unlock after specified time periods
 
 ---
 
 ### 🗳️ **Community Input**
 
-Want to influence Coffee's development? Here's how you can help shape her future:
+Want to influence Akino's development? Here's how you can help shape her future:
 
 - **Feature Requests** - Submit ideas via GitHub issues
 - **Beta Testing** - Join our testing community for early access
@@ -496,11 +496,11 @@ Want to influence Coffee's development? Here's how you can help shape her future
 - **Contributions** - Code contributions are always welcome!
 - **Donations** - Support development for faster feature releases
 
-*"I-it's not like I'm excited about these new features or anything! But... if you want to help make them happen, I guess that would be... nice. Baka!"* - Coffee 💕
+*"I-it's not like I'm excited about these new features or anything! But... if you want to help make them happen, I guess that would be... nice. Baka!"* - Akino 💕
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. Coffee might act annoyed about it, but she secretly appreciates the help!
+Contributions are welcome! Please feel free to submit a Pull Request. Akino might act annoyed about it, but she secretly appreciates the help!
 
 ### 🛠️ **Development Priorities**
 
@@ -526,4 +526,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*"I-it's not like I wanted you to star this repository or anything, baka!"* - Coffee 💕
+*"I-it's not like I wanted you to star this repository or anything, baka!"* - Akino 💕

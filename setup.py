@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Setup script for Coffee - Tsundere AI Discord Bot
+Setup script for Akino - Tsundere AI Discord Bot
 """
 
 import os
@@ -53,7 +53,7 @@ def setup_env_file():
 
 def main():
     """Main setup function"""
-    print("🤖 Coffee - Tsundere AI Discord Bot Setup")
+    print("🤖 Akino - Tsundere AI Discord Bot Setup")
     print("=" * 40)
     
     # Check Python version

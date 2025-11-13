@@ -117,7 +117,7 @@ class TsundereSearch:
             logger.info(f"Starting AI analysis for search query: '{query}'")
             
             # Create a prompt for AI analysis
-            analysis_prompt = f"""You are Coffee, a tsundere AI assistant. A user searched for "{query}" and I found these search results:
+            analysis_prompt = f"""You are Akino, a tsundere AI assistant. A user searched for "{query}" and I found these search results:
 
 {search_results}
 

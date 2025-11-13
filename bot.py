@@ -229,7 +229,7 @@ async def ask_gemini(ctx, *, question):
                         context_text += f"You: {conv['ai_response'][:100]}...\n"
                 
                 # Create enhanced prompt with search results
-                enhanced_prompt = f"""You are Coffee, a tsundere AI assistant. The user {ctx.author.display_name} asked: "{question}"
+                enhanced_prompt = f"""You are Akino, a tsundere AI assistant. The user {ctx.author.display_name} asked: "{question}"
 {context_text}
 I searched the web and found this information:
 {search_results}
@@ -397,7 +397,7 @@ async def help_command(ctx):
     
     # Use ResponseHandler to create a formatted embed
     embed = ResponseHandler.create_info_embed(
-        title=help_config.get("title", "Coffee's Commands"),
+        title=help_config.get("title", "Akino's Commands"),
         description=help_config.get("description", "Here are the commands I 'reluctantly' offer..."),
         fields=[
             {
@@ -1442,7 +1442,7 @@ if __name__ == '__main__':
             asyncio.run(ai_db.close())
         if 'search' in globals() and search:
             asyncio.run(search.close_session())
-        print('👋 Coffee is shutting down... Goodbye!')
+        print('👋 Akino is shutting down... Goodbye!')
         sys.exit(0)
     
     # Register signal handler for graceful shutdown
@@ -1466,7 +1466,7 @@ if __name__ == '__main__':
             asyncio.run(ai_db.close())
         if 'search' in globals() and search:
             asyncio.run(search.close_session())
-        print('👋 Coffee is shutting down... Goodbye!')
+        print('👋 Akino is shutting down... Goodbye!')
     except Exception as e:
         print(f'❌ Bot crashed: {e}')
         # Save any pending data and cleanup

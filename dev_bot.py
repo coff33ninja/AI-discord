@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Development runner for Coffee - Tsundere AI Discord Bot
+Development runner for Akino - Tsundere AI Discord Bot
 Automatically restarts the bot when files are modified
 """
 
@@ -43,7 +43,7 @@ class BotRunner:
         if self.process:
             self.stop_bot()
             
-        print("🤖 Starting Coffee...")
+        print("🤖 Starting Akino...")
         self.process = subprocess.Popen([sys.executable, "bot.py"])
         
     def stop_bot(self):
@@ -79,7 +79,7 @@ class BotRunner:
         
     def run(self):
         """Main run loop"""
-        print("🚀 Coffee Development Runner")
+        print("🚀 Akino Development Runner")
         print("=" * 30)
         print("Features:")
         print("- Auto-restart on file changes")
