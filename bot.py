@@ -685,10 +685,14 @@ async def set_reminder(ctx, *, reminder_input):
             remind_time
         )
         
-        # Create tsundere response
+        # Create tsundere response from persona card
         time_str = remind_time.strftime("%I:%M %p on %B %d")
-        response = f"Ugh, fine! I'll remind you about '{message_part}' at {time_str}. Don't blame me if you forget anyway, baka! (Reminder ID: {reminder_id})"
-        
+        try:
+            response = persona_manager.get_activity_response("reminders", "reminder_created",
+                                                          message=message_part, time=time_str, reminder_id=reminder_id)
+        except Exception:
+            response = f"Ugh, fine! I'll remind you about '{message_part}' at {time_str}. Don't blame me if you forget anyway, baka! (Reminder ID: {reminder_id})"
+
         await ctx.send(response)
         logger.info(f"Reminder set for user {ctx.author.id}: {message_part} at {remind_time}")
         
@@ -705,12 +709,21 @@ async def list_reminders(ctx):
         reminders = await time_utils.get_user_reminders(str(ctx.author.id))
         
         if not reminders:
-            await ctx.send("You don't have any active reminders. It's not like I'm disappointed or anything!")
+            try:
+                no_reminders_msg = persona_manager.get_activity_response("reminders", "no_reminders")
+            except Exception:
+                no_reminders_msg = "You don't have any active reminders. It's not like I'm disappointed or anything!"
+            await ctx.send(no_reminders_msg)
             return
         
+        # Use persona-provided titles/descriptions when available
+        reminders_cfg = persona_manager.persona.get("activity_responses", {}).get("reminders", {})
+        embed_title = reminders_cfg.get("list_title", "📝 Your Active Reminders")
+        embed_description = reminders_cfg.get("list_description", "Here are your reminders, baka!")
+
         embed = discord.Embed(
-            title="📝 Your Active Reminders",
-            description="Here are your reminders, baka!",
+            title=embed_title,
+            description=embed_description,
             color=0x00ff00
         )
         
@@ -742,9 +755,17 @@ async def cancel_reminder(ctx, reminder_id: int):
         success = await time_utils.cancel_reminder(reminder_id, str(ctx.author.id))
         
         if success:
-            await ctx.send(f"✅ Fine! I cancelled reminder {reminder_id}. It's not like I wanted to remind you anyway!")
+            try:
+                msg = persona_manager.get_activity_response("reminders", "reminder_cancelled", reminder_id=reminder_id)
+            except Exception:
+                msg = f"✅ Fine! I cancelled reminder {reminder_id}. It's not like I wanted to remind you anyway!"
+            await ctx.send(msg)
         else:
-            await ctx.send(f"❌ I couldn't find reminder {reminder_id}. Are you sure it exists, baka?")
+            try:
+                msg = persona_manager.get_activity_response("reminders", "reminder_not_found", reminder_id=reminder_id)
+            except Exception:
+                msg = f"❌ I couldn't find reminder {reminder_id}. Are you sure it exists, baka?"
+            await ctx.send(msg)
         
     except Exception as e:
         logger.error(f"Error in cancel reminder command: {e}")
@@ -776,7 +797,12 @@ async def subscribe_feature(ctx, feature_type: str):
                 'weekly_stats': 'weekly statistics',
                 'mood_check': 'mood check-ins'
             }
-            await ctx.send(f"✅ Fine! You're now subscribed to {feature_names.get(feature_type, feature_type)}. Don't expect me to be excited about it!")
+            feature_name = feature_names.get(feature_type, feature_type)
+            try:
+                msg = persona_manager.get_activity_response("subscriptions", "subscribed", feature_name=feature_name)
+            except Exception:
+                msg = f"✅ Fine! You're now subscribed to {feature_name}. Don't expect me to be excited about it!"
+            await ctx.send(msg)
         else:
             await ctx.send("❌ Something went wrong with the subscription!")
         
@@ -797,9 +823,17 @@ async def unsubscribe_feature(ctx, feature_type: str):
         )
         
         if success:
-            await ctx.send(f"✅ Fine! You're unsubscribed from {feature_type}. I wasn't enjoying sending you those anyway!")
+            try:
+                msg = persona_manager.get_activity_response("subscriptions", "unsubscribed", feature_name=feature_type)
+            except Exception:
+                msg = f"✅ Fine! You're unsubscribed from {feature_type}. I wasn't enjoying sending you those anyway!"
+            await ctx.send(msg)
         else:
-            await ctx.send(f"❌ You weren't subscribed to {feature_type} anyway, baka!")
+            try:
+                msg = persona_manager.get_activity_response("subscriptions", "not_subscribed", feature_name=feature_type)
+            except Exception:
+                msg = f"❌ You weren't subscribed to {feature_type} anyway, baka!"
+            await ctx.send(msg)
         
     except Exception as e:
         logger.error(f"Error in unsubscribe command: {e}")
@@ -814,7 +848,11 @@ async def list_subscriptions(ctx):
         subscriptions = await time_utils.get_user_subscriptions(str(ctx.author.id))
         
         if not subscriptions:
-            await ctx.send("You don't have any active subscriptions. It's not like I care!")
+            try:
+                msg = persona_manager.get_activity_response("subscriptions", "no_subscriptions")
+            except Exception:
+                msg = "You don't have any active subscriptions. It's not like I care!"
+            await ctx.send(msg)
             return
         
         embed = discord.Embed(

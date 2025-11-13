@@ -116,19 +116,15 @@ class TsundereSearch:
             
             logger.info(f"Starting AI analysis for search query: '{query}'")
             
-            # Create a prompt for AI analysis
-            analysis_prompt = f"""You are Akino, a tsundere AI assistant. A user searched for "{query}" and I found these search results:
-
-{search_results}
-
-Your task:
-1. Analyze these search results and provide a helpful summary
-2. Answer what the user was likely looking for based on "{query}"
-3. Maintain your tsundere personality (reluctant to help but actually helpful)
-4. Use your speech patterns: "Ugh", "baka", "It's not like...", etc.
-5. Keep the response under {MAX_AI_RESPONSE_LENGTH} characters for Discord
-
-Be informative but act annoyed about having to explain it. Include the most relevant information from the search results."""
+            # Create a prompt for AI analysis using the persona card to avoid duplication
+            try:
+                # Use persona's ai_system_prompt as the system instructions and pass search results as the user question/context
+                user_question = "A user searched for \"{}\" and I found these search results:\n\n{}\n\nYour task: Analyze these results, answer what the user was likely looking for, and keep the response under {} characters.".format(query, search_results, MAX_AI_RESPONSE_LENGTH)
+                # Build final prompt by including persona card context via PersonaManager
+                analysis_prompt = self.persona_manager.create_ai_prompt(user_question)
+            except Exception:
+                # Fallback to legacy inline prompt if persona manager fails
+                analysis_prompt = """You are Akino, a tsundere AI assistant. A user searched for \"{}\" and I found these search results:\n\n{}\n\nYour task:\n1. Analyze these search results and provide a helpful summary\n2. Answer what the user was likely looking for based on \"{}\"\n3. Maintain your tsundere personality (reluctant to help but actually helpful)\n4. Use your speech patterns: \"Ugh\", \"baka\", \"It's not like...\", etc.\n5. Keep the response under {} characters for Discord\n\nBe informative but act annoyed about having to explain it. Include the most relevant information from the search results.""".format(query, search_results, query, MAX_AI_RESPONSE_LENGTH)
 
             # Try to get the API manager from the bot's globals or create a new one
             import sys
@@ -147,8 +143,8 @@ Be informative but act annoyed about having to explain it. Include the most rele
                 ai_response = await api_manager.generate_content(analysis_prompt)
                 
                 if ai_response:
-                    logger.info(f"AI analysis generated successfully")
-                    print(f"🤖 AI analysis generated: {ai_response[:100]}...")
+                    logger.info("AI analysis generated successfully")
+                    print("🤖 AI analysis generated: {}...".format(ai_response[:100]))
                     return ai_response
                 else:
                     logger.warning("AI analysis failed, using fallback")

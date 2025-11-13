@@ -70,6 +70,20 @@
     }
   },
   "activity_responses": {
+    "reminders": {
+      "reminder_created": "Ugh, fine! I'll remind you about '{message}' at {time}. Don't blame me if you forget anyway, baka! (Reminder ID: {reminder_id})",
+      "no_reminders": "You don't have any active reminders. It's not like I'm disappointed or anything!",
+      "reminder_cancelled": "✅ Fine! I cancelled reminder {reminder_id}. It's not like I wanted to remind you anyway!",
+      "reminder_not_found": "❌ I couldn't find reminder {reminder_id}. Are you sure it exists, baka?",
+      "list_title": "📝 Your Active Reminders",
+      "list_description": "Here are your reminders, baka!"
+    },
+    "subscriptions": {
+      "subscribed": "✅ Fine! You're now subscribed to {feature_name}. Don't expect me to be excited about it!",
+      "unsubscribed": "✅ Fine! You're unsubscribed from {feature_name}. I wasn't enjoying sending you those anyway!",
+      "not_subscribed": "❌ You weren't subscribed to {feature_name} anyway, baka!",
+      "no_subscriptions": "You don't have any active subscriptions. It's not like I care!"
+    },
     "weather": {
       "success": "Ugh, fine! Here's the weather for {location}: {weather_info}... Don't blame me if you get cold, baka!",
       "error": "Damn it! I can't get weather for '{location}' right now... It's not my fault!"
