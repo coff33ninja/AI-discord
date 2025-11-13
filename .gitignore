@@ -70,3 +70,4 @@ test_*.py
 
 #Ignore vscode AI rules
 .github\instructions\codacy.instructions.md
+data/ai_database.db

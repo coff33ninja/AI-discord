@@ -17,6 +17,7 @@ from modules.api_manager import GeminiAPIManager
 from modules.config_manager import ConfigManager
 from modules.response_handler import ResponseHandler
 from modules.logger import BotLogger
+from modules.ai_database import initialize_ai_database, save_ai_conversation, ai_db
 
 # Initialize logger
 logger = BotLogger.get_logger(__name__)
@@ -88,6 +89,17 @@ async def on_ready():
     logger.info("All modules initialized successfully")
     print("✅ All modules initialized successfully!")
     
+    # Initialize AI database
+    logger.info("Initializing AI database")
+    print("🗄️ Initializing AI database...")
+    try:
+        await initialize_ai_database()
+        logger.info("AI database initialized successfully")
+        print("✅ AI database ready!")
+    except Exception as e:
+        logger.error(f"Failed to initialize AI database: {e}")
+        print(f"❌ AI database initialization failed: {e}")
+    
     # Print API manager status
     status = api_manager.get_status()
     logger.info(f"API manager initialized: {status['total_keys']} keys, current key #{status['current_key']}")
@@ -138,6 +150,9 @@ async def should_search_web(question):
 @bot.command(name='ai', aliases=['ask', 'chat'])
 async def ask_gemini(ctx, *, question):
     """Ask Gemini AI a question with intelligent search integration"""
+    import time
+    start_time = time.time()
+    
     try:
         logger.info(f"AI command called by user {ctx.author.id}, question: {question[:100]}")
         
@@ -149,6 +164,9 @@ async def ask_gemini(ctx, *, question):
             # Check if this question would benefit from web search
             needs_search = await should_search_web(question)
             logger.info(f"Search needed for question: {needs_search}")
+            
+            model_used = "gemini-pro"
+            tokens_used = 0
             
             if needs_search and search is not None:
                 logger.info(f"Performing web search for: {question}")
@@ -179,6 +197,8 @@ Your task:
 Be helpful but act annoyed about having to search for them."""
 
                 response_text = await api_manager.generate_content(enhanced_prompt)
+                model_used = "gemini-pro-search"
+                tokens_used = len(enhanced_prompt.split()) + (len(response_text.split()) if response_text else 0)
                 
                 if response_text:
                     logger.info("Enhanced AI response generated successfully")
@@ -189,11 +209,14 @@ Be helpful but act annoyed about having to search for them."""
                     print("⚠️ Enhanced AI failed, falling back to normal response")
                     tsundere_prompt = personality.create_ai_prompt(question)
                     response_text = await api_manager.generate_content(tsundere_prompt)
+                    model_used = "gemini-pro"
+                    tokens_used = len(tsundere_prompt.split()) + (len(response_text.split()) if response_text else 0)
             else:
                 # Normal AI response without search
                 logger.info("Generating normal AI response without search")
                 tsundere_prompt = personality.create_ai_prompt(question)
                 response_text = await api_manager.generate_content(tsundere_prompt)
+                tokens_used = len(tsundere_prompt.split()) + (len(response_text.split()) if response_text else 0)
             
             if response_text is None:
                 # All API attempts failed
@@ -201,6 +224,34 @@ Be helpful but act annoyed about having to search for them."""
                 timeout_response = personality.get_error_response("AI timeout")
                 await ctx.send(timeout_response)
                 return
+            
+            # Calculate response time
+            response_time = time.time() - start_time
+            
+            # Save conversation to database
+            try:
+                conversation_id = await save_ai_conversation(
+                    user_id=str(ctx.author.id),
+                    message=question,
+                    response=response_text,
+                    model=model_used,
+                    tokens_used=tokens_used,
+                    response_time=response_time,
+                    channel_id=str(ctx.channel.id),
+                    guild_id=str(ctx.guild.id) if ctx.guild else None,
+                    context_data={
+                        'username': ctx.author.display_name,
+                        'search_used': needs_search,
+                        'command_used': ctx.invoked_with
+                    }
+                )
+                logger.info(f"Conversation saved to database with ID: {conversation_id}")
+                
+                # Track model performance
+                await ai_db.track_model_performance(model_used, tokens_used, response_time, True)
+                
+            except Exception as db_error:
+                logger.error(f"Failed to save conversation to database: {db_error}")
             
             # Discord has a 2000 character limit for messages
             if len(response_text) > 2000:
@@ -217,6 +268,14 @@ Be helpful but act annoyed about having to search for them."""
     except Exception as e:
         logger.error(f"AI command error: {str(e)}")
         print(f"💥 AI command error: {str(e)}")
+        
+        # Track failed request
+        try:
+            response_time = time.time() - start_time
+            await ai_db.track_model_performance("gemini-pro", 0, response_time, False)
+        except Exception:
+            pass
+        
         await ctx.send(personality.get_error_response(e))
 
 async def extract_search_terms(question):
@@ -729,6 +788,14 @@ async def shutdown_bot(ctx):
         social.save_user_data()
         logger.info("User data saved before shutdown")
         
+        # Close AI database
+        try:
+            await ai_db.close()
+            logger.info("AI database closed")
+        except Exception as e:
+            logger.warning(f"Error closing AI database: {e}")
+            print(f"⚠️ Error closing AI database: {e}")
+        
         if search:
             try:
                 await search.close_session()
@@ -793,6 +860,14 @@ async def restart_bot(ctx):
         # Save any pending data and close search session
         social.save_user_data()
         logger.info("User data saved before restart")
+        
+        # Close AI database
+        try:
+            await ai_db.close()
+            logger.info("AI database closed")
+        except Exception as e:
+            logger.warning(f"Error closing AI database: {e}")
+            print(f"⚠️ Error closing AI database: {e}")
         
         if search:
             try:
@@ -868,6 +943,55 @@ async def api_status(ctx):
         fallback = persona_manager.get_activity_response("admin", "no_permission")
         await ctx.send(fallback)
 
+@bot.command(name='ai_analytics')
+async def ai_analytics(ctx, days: int = 7):
+    """View AI usage analytics (admin only)"""
+    logger.info(f"AI analytics command called by user {ctx.author.id}, days: {days}")
+    
+    if ctx.author.guild_permissions.administrator:
+        logger.info(f"Admin permission verified for user {ctx.author.id}")
+        
+        try:
+            analytics = await ai_db.get_analytics(days)
+            logger.info(f"Analytics retrieved for {days} days")
+            
+            embed = discord.Embed(
+                title="🤖 AI Usage Analytics",
+                description=f"Statistics for the last {days} days",
+                color=0x00ff00
+            )
+            
+            embed.add_field(
+                name="📊 Usage Stats",
+                value=f"**Conversations:** {analytics['total_conversations']}\n"
+                      f"**Unique Users:** {analytics['unique_users']}\n"
+                      f"**Total Tokens:** {analytics['total_tokens']:,}\n"
+                      f"**Avg Response Time:** {analytics['avg_response_time']}s",
+                inline=False
+            )
+            
+            if analytics['model_usage']:
+                model_stats = []
+                for model, count in analytics['model_usage'].items():
+                    model_stats.append(f"**{model}:** {count}")
+                
+                embed.add_field(
+                    name="🔧 Model Usage",
+                    value="\n".join(model_stats),
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            logger.info(f"AI analytics embed sent to user {ctx.author.id}")
+            
+        except Exception as e:
+            logger.error(f"Error retrieving AI analytics: {e}")
+            await ctx.send(f"❌ Error retrieving analytics: {e}")
+    else:
+        logger.warning(f"Non-admin user {ctx.author.id} attempted ai_analytics command")
+        fallback = persona_manager.get_activity_response("admin", "no_permission")
+        await ctx.send(fallback)
+
 @bot.event
 async def on_command_error(ctx, error):
     """Global error handler for commands"""
@@ -910,6 +1034,8 @@ if __name__ == '__main__':
         # Save any pending data and cleanup
         if 'social' in globals():
             social.save_user_data()
+        if 'ai_db' in globals():
+            asyncio.run(ai_db.close())
         if 'search' in globals() and search:
             asyncio.run(search.close_session())
         print('👋 Coffee is shutting down... Goodbye!')
@@ -932,6 +1058,8 @@ if __name__ == '__main__':
         # Save any pending data and cleanup
         if 'social' in globals():
             social.save_user_data()
+        if 'ai_db' in globals():
+            asyncio.run(ai_db.close())
         if 'search' in globals() and search:
             asyncio.run(search.close_session())
         print('👋 Coffee is shutting down... Goodbye!')
@@ -940,6 +1068,8 @@ if __name__ == '__main__':
         # Save any pending data and cleanup
         if 'social' in globals():
             social.save_user_data()
+        if 'ai_db' in globals():
+            asyncio.run(ai_db.close())
         if 'search' in globals() and search:
             asyncio.run(search.close_session())
         raise
