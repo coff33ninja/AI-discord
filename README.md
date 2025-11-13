@@ -9,16 +9,16 @@ A Discord bot with a classic tsundere personality powered by Google's Gemini AI.
 
 ## ✨ Features
 
-- 🧠 **AI Chat** with Google Gemini 2.5 Flash
-- 🔍 **Web Search** via DuckDuckGo
-- 🎮 **Games** (Number Guess, RPS, Trivia, 8-Ball)
-- 💝 **Relationship System** that evolves over time
-- 💬 **Conversation Memory** for context-aware responses
-- ⏰ **Reminders & Subscriptions** with natural language
-- 🛠️ **Server Management** (roles, channels, moderation)
-- 🎤 **Voice Interaction** (STT/TTS support)
+- 🧠 **AI Chat** - Google Gemini 2.5 Flash with conversation memory
+- 🔍 **Web Search** - DuckDuckGo integration with instant answers
+- 🎮 **Games** - Number Guess, RPS, Trivia, Magic 8-Ball
+- 💝 **Relationships** - Tracks interaction history with personalized responses
+- 💬 **Memory** - Remembers conversations for context-aware replies
+- ⏰ **Reminders** - Natural language reminders and daily subscriptions
+- 🛠️ **Server Management** - Role/channel creation, user moderation
+- 🎤 **Voice** - Speech-to-text and text-to-speech support
 
-**[📖 Full Features List](./docs/MODULES.md)** | **[🎯 All Commands](./docs/commands.md)**
+**[📖 Full Documentation](./docs/)** | **[🎯 Commands](./docs/commands.md)** | **[📦 Modules](./docs/MODULES.md)**
 
 ## 🚀 Quick Start
 
