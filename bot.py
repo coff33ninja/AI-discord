@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import asyncio
 import random
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Import our tsundere modules
@@ -18,6 +19,7 @@ from modules.config_manager import ConfigManager
 from modules.response_handler import ResponseHandler
 from modules.logger import BotLogger
 from modules.ai_database import initialize_ai_database, save_ai_conversation, ai_db
+from modules.time_utilities import initialize_time_utilities, time_utils
 
 # Initialize logger
 logger = BotLogger.get_logger(__name__)
@@ -99,6 +101,17 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Failed to initialize AI database: {e}")
         print(f"❌ AI database initialization failed: {e}")
+    
+    # Initialize time-based utilities
+    logger.info("Initializing time-based utilities")
+    print("⏰ Initializing time-based utilities...")
+    try:
+        await initialize_time_utilities(bot)
+        logger.info("Time-based utilities initialized successfully")
+        print("✅ Time utilities ready!")
+    except Exception as e:
+        logger.error(f"Failed to initialize time utilities: {e}")
+        print(f"❌ Time utilities initialization failed: {e}")
     
     # Print API manager status
     status = api_manager.get_status()
@@ -385,8 +398,13 @@ async def help_command(ctx):
                 'inline': False
             },
             {
+                'name': "**Time & Reminders**",
+                'value': "`!remind <time> to <message>` - Set a reminder\n`!reminders` - List your reminders\n`!cancelreminder <id>` - Cancel a reminder\n`!subscribe <feature>` - Subscribe to daily features\n`!unsubscribe <feature>` - Unsubscribe from features\n`!subscriptions` - List your subscriptions",
+                'inline': False
+            },
+            {
                 'name': "**Admin Commands** (admin only)",
-                'value': "`!reload_persona` - Reload personality config\n`!api_status` - Check API key status\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
+                'value': "`!reload_persona` - Reload personality config\n`!api_status` - Check API key status\n`!ai_analytics` - View AI usage stats\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
                 'inline': False
             }
         ],
@@ -599,6 +617,193 @@ async def get_user_stats(ctx):
     async with ctx.typing():
         response = await utilities.get_usage_stats(str(ctx.author.id))
     await ctx.send(response)
+
+# Time-based Commands
+@bot.command(name='remind', aliases=['reminder', 'remindme'])
+async def set_reminder(ctx, *, reminder_input):
+    """Set a reminder - Usage: !remind in 5 minutes take a break"""
+    try:
+        logger.info(f"Remind command called by user {ctx.author.id}")
+        
+        # Parse the input to separate time and message
+        parts = reminder_input.split(" to ", 1)
+        if len(parts) != 2:
+            parts = reminder_input.split(" ", 3)
+            if len(parts) < 4:
+                await ctx.send("❌ Please use format: `!remind in 5 minutes to take a break` or `!remind at 3pm to call mom`")
+                return
+            
+            time_part = " ".join(parts[:3])  # "in 5 minutes" or "at 3pm"
+            message_part = " ".join(parts[3:])
+        else:
+            time_part = parts[0]
+            message_part = parts[1]
+        
+        # Parse the time
+        remind_time = time_utils.parse_time_input(time_part)
+        if not remind_time:
+            await ctx.send("❌ I couldn't understand that time format. Try: `in 5 minutes`, `at 3pm`, `tomorrow at 9am`")
+            return
+        
+        # Set the reminder
+        reminder_id = await time_utils.set_reminder(
+            str(ctx.author.id),
+            str(ctx.channel.id),
+            str(ctx.guild.id) if ctx.guild else None,
+            message_part,
+            remind_time
+        )
+        
+        # Create tsundere response
+        time_str = remind_time.strftime("%I:%M %p on %B %d")
+        response = f"Ugh, fine! I'll remind you about '{message_part}' at {time_str}. Don't blame me if you forget anyway, baka! (Reminder ID: {reminder_id})"
+        
+        await ctx.send(response)
+        logger.info(f"Reminder set for user {ctx.author.id}: {message_part} at {remind_time}")
+        
+    except Exception as e:
+        logger.error(f"Error in remind command: {e}")
+        await ctx.send(f"❌ Error setting reminder: {e}")
+
+@bot.command(name='reminders', aliases=['myreminders', 'listreminders'])
+async def list_reminders(ctx):
+    """List your active reminders"""
+    try:
+        logger.info(f"Reminders command called by user {ctx.author.id}")
+        
+        reminders = await time_utils.get_user_reminders(str(ctx.author.id))
+        
+        if not reminders:
+            await ctx.send("You don't have any active reminders. It's not like I'm disappointed or anything!")
+            return
+        
+        embed = discord.Embed(
+            title="📝 Your Active Reminders",
+            description="Here are your reminders, baka!",
+            color=0x00ff00
+        )
+        
+        for reminder in reminders[:10]:  # Limit to 10 reminders
+            remind_time = datetime.fromisoformat(reminder['remind_time'])
+            time_str = remind_time.strftime("%I:%M %p on %B %d")
+            
+            embed.add_field(
+                name=f"ID: {reminder['id']}",
+                value=f"**Message:** {reminder['reminder_text']}\n**Time:** {time_str}",
+                inline=False
+            )
+        
+        if len(reminders) > 10:
+            embed.set_footer(text=f"Showing 10 of {len(reminders)} reminders")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Error in reminders command: {e}")
+        await ctx.send(f"❌ Error getting reminders: {e}")
+
+@bot.command(name='cancelreminder', aliases=['deletereminder', 'removereminder'])
+async def cancel_reminder(ctx, reminder_id: int):
+    """Cancel a specific reminder by ID"""
+    try:
+        logger.info(f"Cancel reminder command called by user {ctx.author.id} for reminder {reminder_id}")
+        
+        success = await time_utils.cancel_reminder(reminder_id, str(ctx.author.id))
+        
+        if success:
+            await ctx.send(f"✅ Fine! I cancelled reminder {reminder_id}. It's not like I wanted to remind you anyway!")
+        else:
+            await ctx.send(f"❌ I couldn't find reminder {reminder_id}. Are you sure it exists, baka?")
+        
+    except Exception as e:
+        logger.error(f"Error in cancel reminder command: {e}")
+        await ctx.send(f"❌ Error canceling reminder: {e}")
+
+@bot.command(name='subscribe')
+async def subscribe_feature(ctx, feature_type: str):
+    """Subscribe to time-based features like daily facts, jokes, etc."""
+    try:
+        logger.info(f"Subscribe command called by user {ctx.author.id} for {feature_type}")
+        
+        valid_features = ['daily_fact', 'daily_joke', 'weekly_stats', 'mood_check']
+        
+        if feature_type not in valid_features:
+            await ctx.send(f"❌ Invalid feature! Available: {', '.join(valid_features)}")
+            return
+        
+        success = await time_utils.subscribe_to_feature(
+            str(ctx.author.id),
+            str(ctx.channel.id),
+            str(ctx.guild.id) if ctx.guild else None,
+            feature_type
+        )
+        
+        if success:
+            feature_names = {
+                'daily_fact': 'daily facts',
+                'daily_joke': 'daily jokes',
+                'weekly_stats': 'weekly statistics',
+                'mood_check': 'mood check-ins'
+            }
+            await ctx.send(f"✅ Fine! You're now subscribed to {feature_names.get(feature_type, feature_type)}. Don't expect me to be excited about it!")
+        else:
+            await ctx.send("❌ Something went wrong with the subscription!")
+        
+    except Exception as e:
+        logger.error(f"Error in subscribe command: {e}")
+        await ctx.send(f"❌ Error subscribing: {e}")
+
+@bot.command(name='unsubscribe')
+async def unsubscribe_feature(ctx, feature_type: str):
+    """Unsubscribe from time-based features"""
+    try:
+        logger.info(f"Unsubscribe command called by user {ctx.author.id} for {feature_type}")
+        
+        success = await time_utils.unsubscribe_from_feature(
+            str(ctx.author.id),
+            str(ctx.channel.id),
+            feature_type
+        )
+        
+        if success:
+            await ctx.send(f"✅ Fine! You're unsubscribed from {feature_type}. I wasn't enjoying sending you those anyway!")
+        else:
+            await ctx.send(f"❌ You weren't subscribed to {feature_type} anyway, baka!")
+        
+    except Exception as e:
+        logger.error(f"Error in unsubscribe command: {e}")
+        await ctx.send(f"❌ Error unsubscribing: {e}")
+
+@bot.command(name='subscriptions', aliases=['mysubscriptions'])
+async def list_subscriptions(ctx):
+    """List your active subscriptions"""
+    try:
+        logger.info(f"Subscriptions command called by user {ctx.author.id}")
+        
+        subscriptions = await time_utils.get_user_subscriptions(str(ctx.author.id))
+        
+        if not subscriptions:
+            await ctx.send("You don't have any active subscriptions. It's not like I care!")
+            return
+        
+        embed = discord.Embed(
+            title="📋 Your Subscriptions",
+            description="Here's what you're subscribed to:",
+            color=0x00ff00
+        )
+        
+        for sub in subscriptions:
+            embed.add_field(
+                name=sub['subscription_type'].replace('_', ' ').title(),
+                value=f"Channel: <#{sub['channel_id']}>\nActive since: {sub['created_at'][:10]}",
+                inline=True
+            )
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Error in subscriptions command: {e}")
+        await ctx.send(f"❌ Error getting subscriptions: {e}")
 
 # Search Commands
 @bot.command(name='search', aliases=['google', 'find'])
