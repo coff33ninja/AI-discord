@@ -126,7 +126,13 @@ def install_uv():
         subprocess.check_call([sys.executable, "-m", "pip", "install", "uv"])
         print("✅ uv installed successfully!")
         return True
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        # Check if it's because the environment is managed by uv
+        if "externally-managed-environment" in str(e) or "managed by uv" in str(e):
+            print("⚠️  This Python is managed by uv (can't install via pip)")
+            print("✅ uv should already be available in this environment")
+            return True
+        
         print("⚠️  Failed to install uv via pip, attempting alternative installation...")
         try:
             # Try using pip's --user flag
@@ -137,14 +143,33 @@ def install_uv():
             print("❌ Failed to install uv!")
             print("   Please install uv manually: https://github.com/astral-sh/uv")
             return False
+    except Exception as e:
+        # If there's any other error, assume uv might already be available
+        print(f"⚠️  Error during uv installation: {e}")
+        print("   Assuming uv is already available...")
+        return True
 
 def check_uv_installed():
     """Check if uv is installed and accessible"""
     try:
+        # Try uv command
         subprocess.check_call(["uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
+        # Try via Python module
+        try:
+            subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+
+def run_uv_command(args):
+    """Run uv command, trying both 'uv' and 'python -m uv'"""
+    try:
+        return subprocess.check_call(["uv"] + args)
+    except FileNotFoundError:
+        # Fall back to python -m uv
+        return subprocess.check_call([sys.executable, "-m", "uv"] + args)
 
 def check_existing_venv():
     """Check for existing virtual environment"""
@@ -245,7 +270,7 @@ def create_venv_with_uv():
     try:
         # Determine venv name based on OS
         venv_name = ".venv"
-        subprocess.check_call(["uv", "venv", venv_name])
+        run_uv_command(["venv", venv_name])
         print(f"✅ Virtual environment created: {venv_name}")
         return True
     except subprocess.CalledProcessError:
@@ -256,7 +281,7 @@ def install_requirements_with_uv():
     """Install required packages using uv"""
     print("\n📦 Installing requirements with uv...")
     try:
-        subprocess.check_call(["uv", "pip", "install", "-r", "requirements.txt"])
+        run_uv_command(["pip", "install", "-r", "requirements.txt"])
         print("✅ Requirements installed successfully with uv!")
         return True
     except subprocess.CalledProcessError:
@@ -276,7 +301,7 @@ def install_kittentts():
     try:
         kittentts_wheel = "https://github.com/KittenML/KittenTTS/releases/download/0.1/kittentts-0.1.0-py3-none-any.whl"
         print(f"   Installing from: {kittentts_wheel}")
-        subprocess.check_call(["uv", "pip", "install", kittentts_wheel])
+        run_uv_command(["pip", "install", kittentts_wheel])
         print("✅ KittenTTS installed successfully!")
         print("   Voice TTS/STT features are now available!")
         return True
