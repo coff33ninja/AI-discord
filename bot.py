@@ -228,22 +228,21 @@ async def ask_gemini(ctx, *, question):
                         context_text += f"User: {conv['message_content'][:100]}...\n"
                         context_text += f"You: {conv['ai_response'][:100]}...\n"
                 
-                # Create enhanced prompt with search results
-                enhanced_prompt = f"""You are Akino, a tsundere AI assistant. The user {ctx.author.display_name} asked: "{question}"
-{context_text}
-I searched the web and found this information:
-{search_results}
+                # Create enhanced prompt with search results using persona card
+                try:
+                    # Get relationship level for user-aware prompting if available
+                    try:
+                        user_rel = social.get_user_relationship(ctx.author.id)
+                        relationship_level = user_rel.get('relationship_level', 'stranger')
+                    except Exception:
+                        relationship_level = 'stranger'
 
-Your task:
-1. Answer the user's question using both your knowledge AND the search results
-2. Use the conversation history to provide continuity and remember what you've discussed
-3. Maintain your tsundere personality throughout
-4. If the search results are relevant, incorporate them naturally
-5. If the search results aren't helpful, rely on your knowledge but mention you tried to search
-6. Keep your response under 1800 characters for Discord
-7. Use your speech patterns: "Ugh", "baka", "It's not like...", etc.
+                    user_question = f"""The user {ctx.author.display_name} asked: \"{question}\"\n{context_text}\nI searched the web and found this information:\n{search_results}\n\nYour task:\n1. Answer the user's question using both your knowledge AND the search results\n2. Use the conversation history to provide continuity and remember what you've discussed\n3. Maintain your tsundere personality throughout\n4. If the search results are relevant, incorporate them naturally\n5. If the search results aren't helpful, rely on your knowledge but mention you tried to search\n6. Keep your response under 1800 characters for Discord\n7. Use your speech patterns: \"Ugh\", \"baka\", \"It's not like...\", etc.\n\nBe helpful but act annoyed about having to search for them."""
 
-Be helpful but act annoyed about having to search for them."""
+                    enhanced_prompt = persona_manager.get_ai_prompt(user_question, relationship_level)
+                except Exception:
+                    # Fallback to legacy inline prompt if persona manager fails
+                    enhanced_prompt = f"""You are Akino, a tsundere AI assistant. The user {ctx.author.display_name} asked: \"{question}\"\n{context_text}\nI searched the web and found this information:\n{search_results}\n\nYour task:\n1. Answer the user's question using both your knowledge AND the search results\n2. Use the conversation history to provide continuity and remember what you've discussed\n3. Maintain your tsundere personality throughout\n4. If the search results are relevant, incorporate them naturally\n5. If the search results aren't helpful, rely on your knowledge but mention you tried to search\n6. Keep your response under 1800 characters for Discord\n7. Use your speech patterns: \"Ugh\", \"baka\", \"It's not like...\", etc.\n\nBe helpful but act annoyed about having to search for them."""
 
                 response_text = await api_manager.generate_content(enhanced_prompt)
                 model_used = "gemini-pro-search"
