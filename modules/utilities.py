@@ -1,15 +1,34 @@
-"""
-Utility functions module - helpful tools with persona-driven responses
-"""
+"""Utility functions module - helpful tools with persona-driven responses"""
 import random
 import datetime
 import requests
 from .persona_manager import PersonaManager
 
+# Constants for external APIs
+OPENWEATHERMAP_API_URL = "http://api.openweathermap.org/data/2.5/weather"
+RANDOM_FACTS_API_URL = "https://uselessfacts.jsph.pl/random.json"
+JOKES_API_URL = "https://official-joke-api.appspot.com/random_joke"
+CAT_FACTS_API_URL = "https://catfact.ninja/fact"
+
+DEFAULT_TIMEOUT = 5
+DEFAULT_API_KEY = "demo_key"  # Replace with real API key from .env
+DEFAULT_DICE_SIDES = 6
+
 class TsundereUtilities:
     def __init__(self, gemini_model, persona_file="persona_card.json"):
         self.model = gemini_model
         self.persona_manager = PersonaManager(persona_file)
+    
+    def _get_persona_response(self, category, subcategory, **format_kwargs):
+        """Helper method to safely get persona responses from nested dictionaries"""
+        try:
+            responses = self.persona_manager.persona.get("activity_responses", {}).get(category, {}).get(subcategory, [])
+            if responses:
+                selected = random.choice(responses)
+                return selected.format(**format_kwargs) if format_kwargs else selected
+        except (KeyError, TypeError, ValueError) as e:
+            print(f"⚠️ Error retrieving persona response: {e}")
+        return None
     
     async def get_weather(self, location):
         """Get weather info using OpenWeatherMap API"""
