@@ -37,6 +37,19 @@ class TsundereGames:
         self.api_manager = api_manager
         self.search = search
         self.ai_db = ai_db
+        self.knowledge_manager = None
+        # Backwards-compatible: also set knowledge manager if present
+        try:
+            from .knowledge_manager import knowledge_manager
+            if isinstance(knowledge_manager, object) and self.ai_db:
+                knowledge_manager.set_ai_db(self.ai_db)
+                self.knowledge_manager = knowledge_manager
+        except Exception:
+            pass
+
+    def set_knowledge_manager(self, km):
+        """Inject a KnowledgeManager instance for knowledge operations."""
+        self.knowledge_manager = km
         # Recent trivia cache to avoid repeating the same questions
         self._recent_trivia = deque(maxlen=50)
 
@@ -132,7 +145,12 @@ class TsundereGames:
 
         # 1) Try DB search for related knowledge
         try:
-            if self.ai_db:
+            if self.knowledge_manager:
+                try:
+                    results = await self.knowledge_manager.search_knowledge(term_clean, limit=max_facts)
+                except Exception:
+                    results = []
+            elif self.ai_db:
                 try:
                     results = await self.ai_db.search_knowledge(term_clean, limit=max_facts)
                 except Exception:

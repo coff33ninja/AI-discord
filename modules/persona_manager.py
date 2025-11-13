@@ -13,11 +13,30 @@ DEFAULT_AI_PROMPT = "You are a helpful AI assistant."
 AI_GENERATION_TIMEOUT = 15.0  # seconds
 
 class PersonaManager:
-    def __init__(self, persona_file="persona_card.json"):
+    def __init__(self, persona_file="persona_card.json", ai_db=None, knowledge_manager=None):
         self.persona_file = persona_file
         self.persona = self.load_persona()
         # Initialize bot name service with the same persona file
         self.bot_name_service = BotNameService(persona_file)
+        # Backwards-compatible storage of raw ai_db
+        self.ai_db = ai_db
+        # Preferred knowledge manager wrapper
+        self.knowledge_manager = knowledge_manager
+
+    def set_ai_db(self, ai_db):
+        """Inject an AI DB instance (AIDatabase) for saving generated persona outputs (backwards-compatible)."""
+        self.ai_db = ai_db
+        try:
+            # If a knowledge manager module exists at import-time, set its ai_db too
+            from .knowledge_manager import knowledge_manager
+            knowledge_manager.set_ai_db(ai_db)
+            self.knowledge_manager = knowledge_manager
+        except Exception:
+            pass
+
+    def set_knowledge_manager(self, km):
+        """Inject a KnowledgeManager instance for saving generated persona outputs."""
+        self.knowledge_manager = km
     
     def load_persona(self):
         """Load persona card from JSON file"""
@@ -377,7 +396,17 @@ Generate an authentic response as the character described in the persona card.""
                         loop.run_in_executor(executor, model.generate_content, prompt),
                         timeout=AI_GENERATION_TIMEOUT
                     )
-                    return response.text.strip()
+                    result = response.text.strip()
+                    # Persist persona-generated response to DB for potential reuse
+                    try:
+                        if getattr(self, 'knowledge_manager', None) and result:
+                            await self.knowledge_manager.add_knowledge('persona', user_action, result)
+                        elif getattr(self, 'ai_db', None) and result:
+                            await self.ai_db.add_knowledge('persona', user_action, result)
+                    except Exception:
+                        # Don't let DB persistence fail the response
+                        pass
+                    return result
                 except asyncio.TimeoutError:
                     # Fallback to template response if AI times out
                     return self.get_response("error")

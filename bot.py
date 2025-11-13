@@ -19,6 +19,7 @@ from modules.config_manager import ConfigManager
 from modules.response_handler import ResponseHandler
 from modules.logger import BotLogger
 from modules.ai_database import initialize_ai_database, save_ai_conversation, ai_db
+from modules.knowledge_manager import knowledge_manager
 from modules.time_utilities import initialize_time_utilities, time_utils
 
 # Initialize logger
@@ -48,6 +49,12 @@ games = TsundereGames()
 try:
     games.set_api_manager(api_manager)
     games.set_ai_db(ai_db)
+    # Pre-wire knowledge manager if available (ai_db may be None until initialized)
+    try:
+        games.set_knowledge_manager(knowledge_manager)
+        persona_manager.set_knowledge_manager(knowledge_manager)
+    except Exception:
+        pass
     logger.info("Pre-wired games with api_manager and ai_db at module import time")
 except Exception:
     logger.warning("Failed to pre-wire games with api_manager or ai_db; will attempt again on_ready")
@@ -108,6 +115,28 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Failed to initialize AI database: {e}")
         print(f"❌ AI database initialization failed: {e}")
+
+    # Wire the knowledge manager to the underlying ai_db and inject into modules
+    try:
+        knowledge_manager.set_ai_db(ai_db)
+        # Inject into modules that accept a knowledge manager
+        try:
+            persona_manager.set_knowledge_manager(knowledge_manager)
+        except Exception:
+            pass
+        try:
+            games.set_knowledge_manager(knowledge_manager)
+        except Exception:
+            pass
+        try:
+            if search is not None:
+                search.set_knowledge_manager(knowledge_manager)
+        except Exception:
+            pass
+        logger.info("Knowledge manager wired to ai_db and injected into modules")
+        print("🔌 Knowledge manager wired to DB and modules")
+    except Exception as e:
+        logger.warning(f"Failed to wire knowledge manager: {e}")
 
     # Inject dependencies into games module (so games can use AI/search/DB)
     try:
@@ -665,6 +694,79 @@ async def get_fact(ctx):
     async with ctx.typing():
         response = await utilities.get_random_fact(str(ctx.author.id))
     await ctx.send(response)
+
+
+@bot.command(name='factadd')
+async def add_fact(ctx, *, payload: str):
+    """Add a fact to the knowledge base. Usage: !factadd <key> | <fact text>
+
+    If you omit the key, the command will try to derive a short key from the fact text.
+    This command stores under category 'facts'."""
+    logger.info(f"factadd called by user {ctx.author.id}, payload: {payload[:120]}")
+    try:
+        # Split by pipe to allow explicit key
+        if '|' in payload:
+            key, fact_text = [p.strip() for p in payload.split('|', 1)]
+        else:
+            fact_text = payload.strip()
+            # Derive a short key from the first few words
+            key = ' '.join(fact_text.split()[:6])
+
+        # Ensure we have something sensible
+        if not fact_text:
+            await ctx.send("❌ Usage: `!factadd <key> | <fact text>` or `!factadd <fact text>`")
+            return
+
+        # Persist via knowledge_manager if available
+        try:
+            if 'knowledge_manager' in globals() and knowledge_manager:
+                await knowledge_manager.add_knowledge('facts', key, fact_text)
+            else:
+                # Fallback to ai_db
+                await ai_db.add_knowledge('facts', key, fact_text)
+        except Exception as e:
+            logger.exception(f"Failed to add fact to DB: {e}")
+            await ctx.send(f"❌ Failed to save fact: {e}")
+            return
+
+        await ctx.send(f"✅ Fact added under key '**{key}**'")
+    except Exception as e:
+        logger.error(f"Error in factadd command: {e}")
+        await ctx.send(f"❌ Error adding fact: {e}")
+
+
+@bot.command(name='followup')
+async def add_followup(ctx, *, payload: str):
+    """Add a follow-up Q/A pair for reuse in trivia or followups.
+
+    Usage: `!followup <question> | <answer>`
+    Stores under category 'followup' with the question as key_term and the answer as content.
+    """
+    logger.info(f"followup called by user {ctx.author.id}, payload: {payload[:200]}")
+    try:
+        if '|' not in payload:
+            await ctx.send("❌ Usage: `!followup <question> | <answer>`")
+            return
+
+        question, answer = [p.strip() for p in payload.split('|', 1)]
+        if not question or not answer:
+            await ctx.send("❌ Both question and answer are required. Usage: `!followup <question> | <answer>`")
+            return
+
+        try:
+            if 'knowledge_manager' in globals() and knowledge_manager:
+                await knowledge_manager.add_knowledge('followup', question, answer)
+            else:
+                await ai_db.add_knowledge('followup', question, answer)
+        except Exception as e:
+            logger.exception(f"Failed to add followup to DB: {e}")
+            await ctx.send(f"❌ Failed to save followup: {e}")
+            return
+
+        await ctx.send(f"✅ Follow-up saved for '**{question}**'")
+    except Exception as e:
+        logger.error(f"Error in followup command: {e}")
+        await ctx.send(f"❌ Error saving followup: {e}")
 
 @bot.command(name='joke')
 async def get_joke(ctx):

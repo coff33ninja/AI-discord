@@ -35,10 +35,15 @@ DEFAULT_HEADERS = {
 }
 
 class TsundereSearch:
-    def __init__(self, gemini_model, persona_file="persona_card.json"):
+    def __init__(self, gemini_model, persona_file="persona_card.json", knowledge_manager=None):
         self.model = gemini_model
         self.persona_manager = PersonaManager(persona_file)
         self.session = None
+        self.knowledge_manager = knowledge_manager
+
+    def set_knowledge_manager(self, km):
+        """Inject a KnowledgeManager instance for persisting search analyses."""
+        self.knowledge_manager = km
     
     def _get_persona_response(self, category, subcategory, format_kwargs=None):
         """Helper method to safely get persona responses from nested dictionaries"""
@@ -141,10 +146,20 @@ class TsundereSearch:
             
             if api_manager:
                 ai_response = await api_manager.generate_content(analysis_prompt)
-                
+
                 if ai_response:
                     logger.info("AI analysis generated successfully")
                     print("🤖 AI analysis generated: {}...".format(ai_response[:100]))
+                    # Persist AI analysis to knowledge DB if available
+                    try:
+                        if getattr(self, 'knowledge_manager', None):
+                            await self.knowledge_manager.add_knowledge('search', query, ai_response)
+                        else:
+                            # Backwards-compatible: try to persist via persona_manager.ai_db if available
+                            if getattr(self.persona_manager, 'ai_db', None):
+                                await self.persona_manager.ai_db.add_knowledge('search', query, ai_response)
+                    except Exception:
+                        logger.exception("Failed to persist AI search analysis to DB")
                     return ai_response
                 else:
                     logger.warning("AI analysis failed, using fallback")
