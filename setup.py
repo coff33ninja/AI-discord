@@ -10,44 +10,42 @@ import subprocess
 import shutil
 
 def check_python_version():
-    """Check if Python version is 3.8 or higher"""
-    if sys.version_info < (3, 8):
-        print("❌ Python 3.8 or higher is required!")
+    """Check if Python version is 3.12 or higher"""
+    if sys.version_info < (3, 12):
+        print("❌ Python 3.12 or higher is required!")
         print(f"Current version: {sys.version}")
         return False
     
     current_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     print(f"✅ Python version: {current_version}")
     
-    # Check if Python 3.13 is available and recommended
-    if sys.version_info < (3, 13):
-        print("\n💡 Python 3.13 is available and recommended for better performance!")
-        print(f"   Current: Python {current_version}")
-        print("   Recommended: Python 3.13+")
-        response = input("Would you like to install Python 3.13? (y/N): ").lower()
-        if response == 'y':
-            return install_python_3_13()
+    # Warn about Python 3.13 compatibility issues
+    if sys.version_info >= (3, 13):
+        print("\n⚠️  WARNING: Python 3.13 detected")
+        print("   Some dependencies (watchdog, KittenTTS) may have compatibility issues.")
+        print("   Recommended: Use Python 3.12.x for best stability")
+        print("   Python 3.12 is fully compatible with all features including voice TTS/STT")
     else:
-        print("✅ Python 3.13 detected - excellent choice!")
+        print(f"✅ Python {current_version} is compatible with all features!")
     
     return True
 
-def install_python_3_13():
-    """Install Python 3.13 using uv"""
-    print("\n🔧 Installing Python 3.13 with uv...")
+def install_python_3_12():
+    """Install Python 3.12 using uv"""
+    print("\n🔧 Installing Python 3.12 with uv...")
     try:
-        # Use uv to download and install Python 3.13
-        subprocess.check_call(["uv", "python", "install", "3.13"])
-        print("✅ Python 3.13 installed successfully!")
+        # Use uv to download and install Python 3.12
+        subprocess.check_call(["uv", "python", "install", "3.12"])
+        print("✅ Python 3.12 installed successfully!")
         print("\n📝 You may need to restart your terminal to use the new Python version.")
         print("   After restart, run setup.py again to complete the setup.")
         return False  # Return False to exit and let user restart
     except FileNotFoundError:
         print("⚠️  uv not found in PATH - installing uv first...")
         if install_uv():
-            return install_python_3_13()
+            return install_python_3_12()
         else:
-            print("❌ Could not install Python 3.13. Please visit: https://www.python.org/")
+            print("❌ Could not install Python 3.12. Please visit: https://www.python.org/")
             return False
     except subprocess.CalledProcessError:
         print("⚠️  Could not install Python 3.13 via uv.")
