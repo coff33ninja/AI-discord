@@ -583,42 +583,49 @@ async def answer_trivia(ctx, *, answer):
 @bot.command(name='mention')
 async def mention_user(ctx, user: discord.Member, *, message=None):
     """Ask the bot to mention someone with an optional message"""
+    logger.info(f"Mention command called by user {ctx.author.id}, target: {user.id}, message: {message[:50] if message else 'None'}")
     response = await server_actions.mention_user(ctx, user, message)
     await ctx.send(response)
 
 @bot.command(name='create_role')
 async def create_role(ctx, role_name, color=None):
     """Create a new role"""
+    logger.info(f"Create role command called by user {ctx.author.id}, role: {role_name}, color: {color}")
     response = await server_actions.create_role(ctx, role_name, color)
     await ctx.send(response)
 
 @bot.command(name='give_role')
 async def give_role(ctx, user: discord.Member, *, role_name):
     """Give a role to a user"""
+    logger.info(f"Give role command called by user {ctx.author.id}, target: {user.id}, role: {role_name}")
     response = await server_actions.give_role(ctx, user, role_name)
     await ctx.send(response)
 
 @bot.command(name='remove_role')
 async def remove_role(ctx, user: discord.Member, *, role_name):
     """Remove a role from a user"""
+    logger.info(f"Remove role command called by user {ctx.author.id}, target: {user.id}, role: {role_name}")
     response = await server_actions.remove_role(ctx, user, role_name)
     await ctx.send(response)
 
 @bot.command(name='kick')
 async def kick_user(ctx, user: discord.Member, *, reason=None):
     """Kick a user from the server"""
+    logger.info(f"Kick command called by user {ctx.author.id}, target: {user.id}, reason: {reason}")
     response = await server_actions.kick_user(ctx, user, reason)
     await ctx.send(response)
 
 @bot.command(name='create_channel')
 async def create_channel(ctx, channel_name, channel_type="text"):
     """Create a new text or voice channel"""
+    logger.info(f"Create channel command called by user {ctx.author.id}, name: {channel_name}, type: {channel_type}")
     response = await server_actions.create_channel(ctx, channel_name, channel_type)
     await ctx.send(response)
 
 @bot.command(name='send_to')
 async def send_message_to_channel(ctx, channel: discord.TextChannel, *, message):
     """Send a message to a specific channel"""
+    logger.info(f"Send to channel command called by user {ctx.author.id}, channel: {channel.id}, message length: {len(message)}")
     response = await server_actions.send_message_to_channel(ctx, channel.mention, message)
     await ctx.send(response)
 
@@ -626,8 +633,12 @@ async def send_message_to_channel(ctx, channel: discord.TextChannel, *, message)
 @bot.command(name='reload_persona')
 async def reload_persona(ctx):
     """Reload the persona card (admin only)"""
+    logger.info(f"Reload persona command called by user {ctx.author.id}")
+    
     if ctx.author.guild_permissions.administrator:
+        logger.info(f"Admin permission verified for user {ctx.author.id}")
         result = personality.reload_persona()
+        logger.info(f"Persona reloaded: {result}")
         
         # Get user relationship for personalized response
         user_data = social.get_user_relationship(ctx.author.id)
@@ -643,9 +654,11 @@ async def reload_persona(ctx):
             await ctx.send(response)
         else:
             # Fallback to persona card response
+            logger.warning("AI response failed for reload_persona, using fallback")
             fallback = persona_manager.get_activity_response("admin", "reload_success", result=result)
             await ctx.send(fallback)
     else:
+        logger.warning(f"Non-admin user {ctx.author.id} attempted reload_persona command")
         # Generate AI response for no permission
         prompt = persona_manager.create_ai_prompt(
             "!reload_persona command (no permission)", ctx.author.display_name, "stranger"
@@ -662,7 +675,11 @@ async def reload_persona(ctx):
 @bot.command(name='shutdown', aliases=['kill', 'stop'])
 async def shutdown_bot(ctx):
     """Shutdown the bot (admin only)"""
+    logger.info(f"Shutdown command called by user {ctx.author.id}")
+    
     if ctx.author.guild_permissions.administrator:
+        logger.info(f"Admin permission verified for user {ctx.author.id}, initiating shutdown")
+        
         # Get user relationship for personalized response
         user_data = social.get_user_relationship(ctx.author.id)
         relationship_level = user_data['relationship_level']
@@ -687,19 +704,25 @@ async def shutdown_bot(ctx):
         
         # Save any pending data and close search session
         social.save_user_data()
+        logger.info("User data saved before shutdown")
+        
         if search:
             try:
                 await search.close_session()
+                logger.info("Search session closed")
             except Exception as e:
+                logger.warning(f"Error closing search session: {e}")
                 print(f"⚠️ Error closing search session: {e}")
         
         # Close bot connection and exit
+        logger.info("Closing bot connection")
         await bot.close()
         
         # Force exit the script
         import sys
         sys.exit(0)
     else:
+        logger.warning(f"Non-admin user {ctx.author.id} attempted shutdown command")
         # Generate AI response for no permission
         prompt = persona_manager.create_ai_prompt(
             "!shutdown command (no permission)", ctx.author.display_name, "stranger"
@@ -716,7 +739,11 @@ async def shutdown_bot(ctx):
 @bot.command(name='restart', aliases=['reboot'])
 async def restart_bot(ctx):
     """Restart the bot (admin only)"""
+    logger.info(f"Restart command called by user {ctx.author.id}")
+    
     if ctx.author.guild_permissions.administrator:
+        logger.info(f"Admin permission verified for user {ctx.author.id}, initiating restart")
+        
         # Get user relationship for personalized response
         user_data = social.get_user_relationship(ctx.author.id)
         relationship_level = user_data['relationship_level']
@@ -730,6 +757,7 @@ async def restart_bot(ctx):
             await ctx.send(response_text)
         else:
             # Fallback to persona card response
+            logger.warning("AI response failed for restart, using fallback")
             restart_responses = persona_manager.get_activity_response("admin", "restart")
             if isinstance(restart_responses, list):
                 fallback = random.choice(restart_responses)
@@ -741,21 +769,28 @@ async def restart_bot(ctx):
         
         # Save any pending data and close search session
         social.save_user_data()
+        logger.info("User data saved before restart")
+        
         if search:
             try:
                 await search.close_session()
+                logger.info("Search session closed")
             except Exception as e:
+                logger.warning(f"Error closing search session: {e}")
                 print(f"⚠️ Error closing search session: {e}")
         
         # Close bot connection
+        logger.info("Closing bot connection for restart")
         await bot.close()
         
         # Restart the script
         import os
         import sys
         print("Restarting bot...")
+        logger.info("Restarting bot process")
         os.execv(sys.executable, ['python'] + sys.argv)
     else:
+        logger.warning(f"Non-admin user {ctx.author.id} attempted restart command")
         # Generate AI response for no permission
         response_text = await api_manager.generate_content(
             persona_manager.create_ai_prompt("!restart command (no permission)", ctx.author.display_name, "stranger")
@@ -771,8 +806,12 @@ async def restart_bot(ctx):
 @bot.command(name='api_status')
 async def api_status(ctx):
     """Check API key status (admin only)"""
+    logger.info(f"API status command called by user {ctx.author.id}")
+    
     if ctx.author.guild_permissions.administrator:
+        logger.info(f"Admin permission verified for user {ctx.author.id}")
         status = api_manager.get_status()
+        logger.info(f"API status retrieved, total keys: {status['total_keys']}")
         
         embed = discord.Embed(
             title="🔑 API Key Status",
@@ -799,7 +838,9 @@ async def api_status(ctx):
             embed.add_field(name=field_name, value=field_value, inline=True)
         
         await ctx.send(embed=embed)
+        logger.info(f"API status embed sent to user {ctx.author.id}")
     else:
+        logger.warning(f"Non-admin user {ctx.author.id} attempted api_status command")
         # Fallback to persona card response
         fallback = persona_manager.get_activity_response("admin", "no_permission")
         await ctx.send(fallback)
@@ -807,25 +848,33 @@ async def api_status(ctx):
 @bot.event
 async def on_command_error(ctx, error):
     """Global error handler for commands"""
+    logger.error(f"Command error from user {ctx.author.id} in {ctx.command}: {str(error)}")
+    
     if isinstance(error, commands.MissingRequiredArgument):
         # Handle missing arguments with persona response
+        logger.warning(f"Missing required argument: {error.param.name}")
         await ctx.send(personality.get_missing_args_response() + f" You're missing: {error.param.name}")
     elif isinstance(error, commands.CommandNotFound):
         # Ignore command not found errors (don't spam chat)
+        logger.debug("Command not found error ignored")
         pass
     elif isinstance(error, discord.Forbidden):
         # Bot doesn't have permissions - try to DM user if possible
+        logger.warning(f"Forbidden action, attempting DM to user {ctx.author.id}")
         try:
             permissions_config = persona_manager.persona.get("activity_responses", {}).get("permissions", {})
             message = permissions_config.get("no_send_permission", "I don't have permission to send messages!")
             await ctx.author.send(message)
         except (discord.Forbidden, discord.HTTPException):
+            logger.warning(f"Could not DM user {ctx.author.id} about permission error")
             pass  # Can't DM either, give up silently
     else:
         # For other errors, send a generic tsundere error message
+        logger.error(f"Unhandled command error: {type(error).__name__}: {str(error)}")
         try:
             await ctx.send(personality.get_error_response(error))
         except (discord.Forbidden, discord.HTTPException):
+            logger.error(f"Could not send error response to user {ctx.author.id}")
             pass  # If we can't send the error message, fail silently
 
 if __name__ == '__main__':
