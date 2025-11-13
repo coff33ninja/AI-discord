@@ -8,6 +8,10 @@ import logging
 from typing import List, Optional, Dict
 
 import json
+from datetime import datetime
+
+
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeManager:
@@ -65,47 +69,110 @@ class KnowledgeManager:
             merged = []
             seen_texts = set()
 
-            # Load existing items if present
+            # Load existing items if present and normalize into structured entries
+            now_iso = datetime.utcnow().isoformat() + "Z"
+            def _normalize_existing_item(it):
+                # Normalize an existing item into comprehensive dict
+                if isinstance(it, dict):
+                    text = it.get('text') or it.get('content') or str(it)
+                    meta = it.get('meta') if isinstance(it.get('meta'), dict) else it.get('metadata') if isinstance(it.get('metadata'), dict) else {}
+                    created_at = it.get('created_at') or it.get('createdAt') or None
+                    updated_at = it.get('updated_at') or it.get('updatedAt') or None
+                    history = it.get('history') if isinstance(it.get('history'), list) else []
+                else:
+                    text = str(it)
+                    meta = {}
+                    created_at = None
+                    updated_at = None
+                    history = []
+
+                if not created_at:
+                    created_at = now_iso
+                if not updated_at:
+                    updated_at = created_at
+                if not history:
+                    history = [{'text': text, 'meta': meta, 'timestamp': created_at}]
+
+                return {
+                    'text': text,
+                    'meta': meta,
+                    'created_at': created_at,
+                    'updated_at': updated_at,
+                    'history': history
+                }
+
             if existing_content:
                 try:
                     parsed_existing = json.loads(existing_content)
                     if isinstance(parsed_existing, list):
                         for it in parsed_existing:
-                            text = (it.get('text') if isinstance(it, dict) else str(it))
-                            key = text.strip().lower()
+                            norm = _normalize_existing_item(it)
+                            key = norm['text'].strip().lower()
                             if key not in seen_texts:
                                 seen_texts.add(key)
-                                merged.append(it)
+                                merged.append(norm)
                     elif isinstance(parsed_existing, dict):
-                        text = parsed_existing.get('text') if isinstance(parsed_existing, dict) else str(parsed_existing)
-                        key = text.strip().lower()
+                        norm = _normalize_existing_item(parsed_existing)
+                        key = norm['text'].strip().lower()
                         seen_texts.add(key)
-                        merged.append(parsed_existing)
+                        merged.append(norm)
                     else:
                         txt = str(parsed_existing)
-                        seen_texts.add(txt.strip().lower())
-                        merged.append({'text': txt})
+                        norm = _normalize_existing_item(txt)
+                        seen_texts.add(norm['text'].strip().lower())
+                        merged.append(norm)
                 except Exception:
                     # Treat raw existing content as single text item
                     txt = str(existing_content)
-                    seen_texts.add(txt.strip().lower())
-                    merged.append({'text': txt})
+                    norm = _normalize_existing_item(txt)
+                    seen_texts.add(norm['text'].strip().lower())
+                    merged.append(norm)
 
-            # Merge in new items, dedupe by lowercase text
+            # Merge in new items, with metadata merging and append-only history per entry
             for it in new_items:
                 if isinstance(it, dict):
                     text = it.get('text') or it.get('content') or str(it)
+                    new_meta = it.get('meta') if isinstance(it.get('meta'), dict) else it.get('metadata') if isinstance(it.get('metadata'), dict) else {}
                 else:
                     text = str(it)
+                    new_meta = {}
+
                 key = text.strip().lower()
-                if key in seen_texts:
-                    continue
-                seen_texts.add(key)
-                # Prefer to store dicts when supplied
-                if isinstance(it, dict):
-                    merged.append(it)
+
+                # If exists, merge metadata and append version to history
+                found = None
+                for entry in merged:
+                    if entry['text'].strip().lower() == key:
+                        found = entry
+                        break
+
+                if found:
+                    # Append a new version to history
+                    version = {'text': text, 'meta': new_meta, 'timestamp': now_iso}
+                    try:
+                        found['history'].append(version)
+                    except Exception:
+                        found['history'] = [version]
+
+                    # Merge metadata (new keys override existing)
+                    try:
+                        if not isinstance(found.get('meta'), dict):
+                            found['meta'] = {}
+                        found['meta'].update(new_meta or {})
+                    except Exception:
+                        found['meta'] = new_meta or {}
+
+                    found['updated_at'] = now_iso
                 else:
-                    merged.append({'text': text})
+                    # New entry - create structured record with history
+                    new_entry = {
+                        'text': text,
+                        'meta': new_meta or {},
+                        'created_at': now_iso,
+                        'updated_at': now_iso,
+                        'history': [{'text': text, 'meta': new_meta or {}, 'timestamp': now_iso}]
+                    }
+                    merged.append(new_entry)
 
             # Final content as JSON array
             final_content = json.dumps(merged, ensure_ascii=False)
