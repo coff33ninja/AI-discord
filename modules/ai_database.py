@@ -271,6 +271,28 @@ class AIDatabase:
             await db.commit()
             return [dict(zip(columns, row)) for row in rows]
 
+    async def get_random_knowledge(self, category: str = None) -> Optional[Dict]:
+        """
+        Return a single random knowledge_base entry optionally filtered by category.
+        Returns None if no entry found.
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            if category:
+                cursor = await db.execute("""
+                    SELECT * FROM knowledge_base WHERE category = ? ORDER BY RANDOM() LIMIT 1
+                """, (category,))
+            else:
+                cursor = await db.execute("""
+                    SELECT * FROM knowledge_base ORDER BY RANDOM() LIMIT 1
+                """)
+
+            row = await cursor.fetchone()
+            if not row:
+                return None
+
+            columns = [description[0] for description in cursor.description]
+            return dict(zip(columns, row))
+
     async def save_feedback(self, conversation_id: int, user_id: str,
                           feedback_type: str, feedback_content: str = None,
                           quality_rating: int = None):
@@ -357,3 +379,10 @@ async def get_user_ai_history(user_id: str, limit: int = 10) -> List[Dict]:
 
 async def get_ai_preferences(user_id: str) -> Dict:
     return await ai_db.get_user_preferences(user_id)
+
+async def get_random_knowledge(category: str = None) -> Optional[Dict]:
+    """
+    Return a single random knowledge_base row optionally filtered by category.
+    Returns None if no entry found.
+    """
+    return await ai_db.get_random_knowledge(category)

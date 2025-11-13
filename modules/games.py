@@ -3,6 +3,9 @@ Games module - fun interactive games with persona-driven responses
 """
 import random
 import asyncio
+import json
+import re
+
 from .persona_manager import PersonaManager
 from .logger import BotLogger
 
@@ -19,13 +22,28 @@ NUMBER_GUESSING_TIMEOUT = 60  # Time limit for number guessing
 COUNTDOWN_INTERVAL = 5  # Announce every 5 seconds
 
 class TsundereGames:
-    def __init__(self, persona_file="persona_card.json"):
+    def __init__(self, persona_file="persona_card.json", api_manager=None, search=None, ai_db=None):
         self.active_games = {}  # {user_id: {game_data}}
         self.active_questions = {}  # {question_id: {question_data, answered_users: set()}}
         self.active_timers = {}  # {timer_id: task} to track active countdown timers
         self.persona_manager = PersonaManager(persona_file)
         self.question_counter = 0
         self.timer_counter = 0
+
+        # Optional external services (injected by bot on_ready)
+        self.api_manager = api_manager
+        self.search = search
+        self.ai_db = ai_db
+
+    # Dependency injection helpers
+    def set_api_manager(self, api_manager):
+        self.api_manager = api_manager
+
+    def set_search(self, search):
+        self.search = search
+
+    def set_ai_db(self, ai_db):
+        self.ai_db = ai_db
     
     def _get_persona_response(self, category, subcategory, **format_kwargs):
         """Helper method to safely get persona responses from nested dictionaries"""
@@ -266,8 +284,17 @@ class TsundereGames:
         
         return response
     
-    async def trivia_game(self, user_id, ctx=None):
-        """Start a trivia game with dramatic timing and countdown"""
+    async def trivia_game(self, user_id, ctx=None, source: str = None):
+        """Start a trivia game with dramatic timing and countdown.
+
+        The trivia question can come from:
+        - DB (`ai_db` knowledge_base) when available
+        - AI (`api_manager`) when available
+        - Fallback static list
+
+        `source` can be 'db', 'ai', or None (auto-select).
+        """
+        # Static fallback pool
         questions = [
             {"q": "What's the capital of Japan?", "a": "tokyo"},
             {"q": "What's 7 x 8?", "a": "56"},
@@ -275,8 +302,83 @@ class TsundereGames:
             {"q": "How many days are in a leap year?", "a": "366"},
             {"q": "What's the largest planet in our solar system?", "a": "jupiter"}
         ]
-        
-        question_data = random.choice(questions)
+
+        question_data = None
+
+        # 1) Try DB source if requested or available
+        if source != 'ai' and self.ai_db:
+            try:
+                db_entry = await self.ai_db.get_random_knowledge('trivia')
+            except Exception:
+                db_entry = None
+
+            if db_entry:
+                # Heuristic parsing of DB content into question/answer
+                key = db_entry.get('key_term') or ''
+                content = db_entry.get('content') or ''
+
+                q = None
+                a = None
+
+                # If content encodes question|answer
+                if '|' in content:
+                    parts = [p.strip() for p in content.split('|', 1)]
+                    if len(parts) == 2:
+                        q, a = parts[0], parts[1]
+                # If multiple lines, prefer first two lines
+                elif '\n' in content:
+                    parts = [p.strip() for p in content.splitlines() if p.strip()]
+                    if len(parts) >= 2:
+                        q, a = parts[0], parts[1]
+                # If key_term looks like a question, use it
+                if not q and key:
+                    q = key
+                    a = content
+
+                # If we successfully parsed a Q/A pair, use it
+                if q and a:
+                    question_data = {'q': q, 'a': a}
+
+        # 2) Try AI generation if requested or DB didn't yield
+        if source == 'ai' and not self.api_manager:
+            # User explicitly requested AI but API manager is not available
+            return self._get_persona_response('games', 'ai_unavailable') or "Sorry, AI is not available right now. Try again later."
+
+        if not question_data and self.api_manager and source != 'db':
+            try:
+                prompt = (
+                    "Generate a single short trivia question and its answer. "
+                    "Return only a JSON object with keys 'question' and 'answer'. "
+                    "Keep both concise. Example: {\"question\": \"...\", \"answer\": \"...\"}"
+                )
+                ai_resp = await self.api_manager.generate_content(prompt)
+                # Try to extract JSON from the response
+                parsed = None
+                try:
+                    # Find first JSON object in text
+                    m = re.search(r"\{.*\}", ai_resp, flags=re.S)
+                    if m:
+                        parsed = json.loads(m.group(0))
+                    else:
+                        parsed = json.loads(ai_resp)
+                except Exception:
+                    parsed = None
+
+                if parsed and isinstance(parsed, dict) and parsed.get('question') and parsed.get('answer'):
+                    question_data = {'q': parsed['question'].strip(), 'a': parsed['answer'].strip()}
+                else:
+                    # Fallback: try to parse 'Question:' and 'Answer:' lines
+                    if isinstance(ai_resp, str):
+                        qmatch = re.search(r"Question\s*:\s*(.+)", ai_resp, flags=re.I)
+                        amatch = re.search(r"Answer\s*:\s*(.+)", ai_resp, flags=re.I)
+                        if qmatch and amatch:
+                            question_data = {'q': qmatch.group(1).strip(), 'a': amatch.group(1).strip()}
+            except Exception:
+                question_data = None
+
+        # 3) Final fallback to static pool
+        if not question_data:
+            question_data = random.choice(questions)
         self.question_counter += 1
         question_id = self.question_counter
         
@@ -309,6 +411,19 @@ class TsundereGames:
         
         persona_msg = self._get_persona_response("games", "trivia_start", question=question_data['q'])
         initial_message = persona_msg or f"Question: {question_data['q']}"
+
+        # Announce the source for debugging/visibility
+        try:
+            if 'db_entry' in locals() and db_entry:
+                source_used = 'DB'
+            elif source == 'ai' or (self.api_manager and 'ai_resp' in locals() and ai_resp):
+                source_used = 'AI'
+            else:
+                source_used = 'static'
+            initial_message += f"\n\n*(source: {source_used})*"
+        except Exception:
+            # don't break on source annotation
+            pass
         
         # Start countdown announcements in background
         if ctx:
@@ -338,7 +453,11 @@ class TsundereGames:
                     break
                 
                 # Announce at COUNTDOWN_INTERVAL boundaries (e.g., 25, 20, 15, 10, 5 seconds)
+                # Avoid announcing immediately at the full timeout value (so we don't repeat the question instantly)
                 for announce_time in range(int(timeout_duration), 0, -COUNTDOWN_INTERVAL):
+                    if announce_time >= int(timeout_duration):
+                        # skip announcing the full timeout value immediately after question
+                        continue
                     if remaining <= announce_time and announce_time not in announced_times:
                         announced_times.add(announce_time)
                         await ctx.send(f"⏱️ **{announce_time} seconds left for {game_name}!**")

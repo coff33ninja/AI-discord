@@ -44,6 +44,13 @@ persona_manager = PersonaManager()
 # Removed: personality = TsunderePersonality() - now using persona_manager for all responses
 utilities = None  # Will be initialized after model is ready
 games = TsundereGames()
+# Inject api_manager early so commands that prefer AI can use it immediately
+try:
+    games.set_api_manager(api_manager)
+    games.set_ai_db(ai_db)
+    logger.info("Pre-wired games with api_manager and ai_db at module import time")
+except Exception:
+    logger.warning("Failed to pre-wire games with api_manager or ai_db; will attempt again on_ready")
 social = TsundereSocial()
 server_actions = TsundereServerActions()
 search = None  # Will be initialized after model is ready
@@ -101,6 +108,16 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Failed to initialize AI database: {e}")
         print(f"❌ AI database initialization failed: {e}")
+
+    # Inject dependencies into games module (so games can use AI/search/DB)
+    try:
+        games.set_api_manager(api_manager)
+        games.set_search(search)
+        games.set_ai_db(ai_db)
+        logger.info("Injected api_manager, search, and ai_db into games module")
+        print("🔌 Games module wired to AI/search/DB")
+    except Exception as e:
+        logger.warning(f"Failed to inject dependencies into games: {e}")
     
     # Initialize time-based utilities
     logger.info("Initializing time-based utilities")
@@ -1029,11 +1046,11 @@ async def magic_8ball(ctx, *, question):
     await ctx.send(response)
 
 @bot.command(name='trivia')
-async def start_trivia(ctx):
-    """Start a trivia game"""
-    logger.info(f"Trivia command called by user {ctx.author.id}")
+async def start_trivia(ctx, source: str = None):
+    """Start a trivia game. Optional `source` can be 'db' or 'ai' to force source."""
+    logger.info(f"Trivia command called by user {ctx.author.id}, source={source}")
     async with ctx.typing():
-        response = await games.trivia_game(ctx.author.id, ctx)
+        response = await games.trivia_game(ctx.author.id, ctx, source=source)
     await ctx.send(response)
 
 @bot.command(name='answer', aliases=['g'])
