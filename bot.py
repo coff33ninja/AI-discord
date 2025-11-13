@@ -61,10 +61,11 @@ except Exception:
 social = TsundereSocial()
 server_actions = TsundereServerActions()
 search = None  # Will be initialized after model is ready
+ai_voice = None  # Will be initialized in on_ready
 
 @bot.event
 async def on_ready():
-    global utilities, search, model
+    global utilities, search, model, ai_voice
     
     # Validate configuration on first connection
     try:
@@ -101,6 +102,19 @@ async def on_ready():
     logger.info("Initializing search module")
     print("🔍 Initializing search module...")
     search = TsundereSearch(model)
+    
+    # Initialize AI Voice Integration
+    logger.info("Initializing AI Voice Integration with KittenTTS")
+    print("🎤 Initializing AI Voice Integration...")
+    try:
+        from modules.ai_voice_integration import get_ai_voice_integration
+        ai_voice = get_ai_voice_integration(default_voice='expr-voice-2-f', auto_speak=True)
+        logger.info("AI Voice Integration initialized successfully")
+        print("✅ AI Voice Integration ready!")
+    except Exception as e:
+        logger.warning(f"Failed to initialize AI Voice Integration: {e}")
+        print(f"⚠️ AI Voice Integration failed: {e}")
+        ai_voice = None
     
     logger.info("All modules initialized successfully")
     print("✅ All modules initialized successfully!")
@@ -561,6 +575,15 @@ async def on_message(message):
             if response:
                 await message.channel.send(response)
                 logger.info(f"Response sent to mention in guild {message.guild.id}")
+                
+                # Speak the response in voice channel if connected
+                if ai_voice and ai_voice.is_connected_to_voice(message.guild.id):
+                    try:
+                        await ai_voice.speak_ai_response(message.guild.id, response)
+                        logger.info(f"AI response spoken in voice for guild {message.guild.id}")
+                    except Exception as voice_error:
+                        logger.warning(f"Failed to speak AI response in voice: {voice_error}")
+
         except discord.Forbidden:
             logger.warning(f"No permission to send message in channel {message.channel.id}")
             # Bot doesn't have permission to send messages in this channel
@@ -649,6 +672,138 @@ async def check_relationship(ctx):
         except Exception:
             fallback = persona_manager.get_response("greeting")
         await ctx.send(f"{fallback} (Interactions: {interactions}, Level: {relationship_level})")
+
+# Voice Commands with KittenTTS Integration
+@bot.command(name='join_voice')
+async def join_voice(ctx):
+    """Join your voice channel"""
+    if not ai_voice:
+        await ctx.send("❌ Voice system not initialized")
+        return
+    
+    if not ctx.author.voice:
+        await ctx.send("❌ You must be in a voice channel!")
+        return
+    
+    try:
+        success = await ai_voice.connect_guild_to_voice(ctx.guild.id, ctx.author.voice.channel)
+        if success:
+            await ctx.send(f"✅ Joined {ctx.author.voice.channel.name}")
+            logger.info(f"Joined voice channel {ctx.author.voice.channel.name} in guild {ctx.guild.id}")
+        else:
+            await ctx.send("❌ Failed to join voice channel")
+    except Exception as e:
+        await ctx.send(f"❌ Error joining voice: {str(e)}")
+        logger.error(f"Error joining voice channel: {e}")
+
+@bot.command(name='leave_voice')
+async def leave_voice(ctx):
+    """Leave the current voice channel"""
+    if not ai_voice:
+        await ctx.send("❌ Voice system not initialized")
+        return
+    
+    try:
+        success = await ai_voice.disconnect_guild_from_voice(ctx.guild.id, ctx.guild)
+        if success:
+            await ctx.send("✅ Left voice channel")
+            logger.info(f"Left voice channel in guild {ctx.guild.id}")
+        else:
+            await ctx.send("❌ Not in a voice channel")
+    except Exception as e:
+        await ctx.send(f"❌ Error leaving voice: {str(e)}")
+        logger.error(f"Error leaving voice channel: {e}")
+
+@bot.command(name='speak')
+async def speak_text(ctx, *, text):
+    """Make the AI speak in voice channel"""
+    if not ai_voice:
+        await ctx.send("❌ Voice system not initialized")
+        return
+    
+    if not ai_voice.is_connected_to_voice(ctx.guild.id):
+        await ctx.send("❌ Not connected to a voice channel! Use !join_voice first")
+        return
+    
+    if not text or len(text.strip()) == 0:
+        await ctx.send("❌ Please provide text to speak")
+        return
+    
+    async with ctx.typing():
+        try:
+            success = await ai_voice.speak_response(ctx.guild.id, text)
+            if success:
+                await ctx.send(f"🔊 Speaking: *{text[:50]}...*")
+                logger.info(f"Spoke text in guild {ctx.guild.id}")
+            else:
+                await ctx.send("❌ Failed to generate or play audio")
+        except Exception as e:
+            await ctx.send(f"❌ Error speaking: {str(e)}")
+            logger.error(f"Error speaking text: {e}")
+
+@bot.command(name='voice_ask')
+async def voice_ask_gemini(ctx, *, question):
+    """Ask Gemini AI a question and hear the response"""
+    if not ai_voice:
+        await ctx.send("❌ Voice system not initialized")
+        return
+    
+    if not ai_voice.is_connected_to_voice(ctx.guild.id):
+        await ctx.send("❌ Not connected to a voice channel! Use !join_voice first")
+        return
+    
+    logger.info(f"Voice ask command called by user {ctx.author.id}: {question[:100]}")
+    
+    async with ctx.typing():
+        try:
+            # Generate AI response
+            response = await api_manager.generate_content(question)
+            
+            if response:
+                # Send text response to channel
+                await ctx.send(f"🤖 AI: {response}")
+                
+                # Speak the response in voice channel
+                await ai_voice.speak_ai_response(ctx.guild.id, response)
+                logger.info(f"Voice ask response sent in guild {ctx.guild.id}")
+            else:
+                await ctx.send("❌ Failed to generate AI response")
+        except Exception as e:
+            await ctx.send(f"❌ Error: {str(e)}")
+            logger.error(f"Error in voice_ask: {e}")
+
+@bot.command(name='ai_voice')
+async def change_ai_voice(ctx, voice: str = None):
+    """Change the AI's voice"""
+    if not ai_voice:
+        await ctx.send("❌ Voice system not initialized")
+        return
+    
+    if voice is None:
+        # List available voices
+        from modules.tts_manager import AVAILABLE_VOICES
+        available = "\n".join([f"• `{v}`" for v in AVAILABLE_VOICES])
+        current = ai_voice.get_guild_voice(ctx.guild.id)
+        await ctx.send(f"🎤 Current voice: `{current}`\n\n**Available voices:**\n{available}")
+        return
+    
+    if ai_voice.set_guild_voice(ctx.guild.id, voice):
+        await ctx.send(f"✅ Voice changed to: `{voice}`")
+        logger.info(f"Guild {ctx.guild.id} voice changed to {voice}")
+    else:
+        await ctx.send(f"❌ Invalid voice: `{voice}`")
+
+@bot.command(name='toggle_auto_speak')
+async def toggle_auto_speak(ctx):
+    """Toggle automatic voice synthesis for mentions"""
+    if not ai_voice:
+        await ctx.send("❌ Voice system not initialized")
+        return
+    
+    new_state = ai_voice.toggle_auto_speak()
+    state_str = "enabled" if new_state else "disabled"
+    await ctx.send(f"✅ Auto-speak {state_str}")
+    logger.info(f"Auto-speak toggled to {new_state} by user {ctx.author.id}")
 
 # Utility Commands
 @bot.command(name='time')
