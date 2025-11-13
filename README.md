@@ -1,74 +1,24 @@
 # Tsundere AI Discord Bot 🤖💕
 
-A Discord bot with a classic tsundere personality powered by Google's Gemini AI. The bot's name and personality are fully customizable through the persona card configuration - by default, meet Akeno! She's helpful but acts annoyed about it, uses mild swearing, and gets adorably flustered when complimented!
+A Discord bot with a classic tsundere personality powered by Google's Gemini AI. She's helpful but acts annoyed about it, uses mild swearing, and gets adorably flustered when complimented!
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Discord.py](https://img.shields.io/badge/discord.py-2.3.2-blue.svg)
 ![Gemini AI](https://img.shields.io/badge/Gemini-2.5--flash-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## 🎭 Personality
-
-The bot (Akeno by default) has a classic tsundere personality:
-- **Reluctant Helper**: Acts annoyed while being genuinely helpful
-- **Defensive**: Gets flustered easily, especially with compliments
-- **Caring but Denying**: Obviously cares but refuses to admit it
-- **Mild Attitude**: Uses "baka," "idiot," and mild swearing when frustrated
-- **Relationship Growth**: Becomes more caring (but more flustered) as you interact more
-
 ## ✨ Features
 
-### 🧠 **AI Integration**
-- **Google Gemini 2.5 Flash** for intelligent conversations
-- **Persona-driven responses** with consistent tsundere personality
-- **Context-aware** responses based on relationship level
-- **Timeout protection** for API calls (30-second limit)
-- **🆕 Multiple API Keys** - Automatic rotation for better reliability
-- **🆕 Rate Limit Handling** - Smart cooldown and retry logic
-- **🆕 Conversation Memory** - Remembers previous conversations for continuity
-- **🆕 Persistent Database** - SQLite storage for all AI interactions
+- 🧠 **AI Chat** with Google Gemini 2.5 Flash
+- 🔍 **Web Search** via DuckDuckGo
+- 🎮 **Games** (Number Guess, RPS, Trivia, 8-Ball)
+- 💝 **Relationship System** that evolves over time
+- 💬 **Conversation Memory** for context-aware responses
+- ⏰ **Reminders & Subscriptions** with natural language
+- 🛠️ **Server Management** (roles, channels, moderation)
+- 🎤 **Voice Interaction** (STT/TTS support)
 
-### 🔍 **🆕 Web Search**
-- **DuckDuckGo Integration** - Search the web with tsundere attitude
-- **Instant Answers** - Quick facts, calculations, and definitions
-- **Smart Parsing** - BeautifulSoup-powered result extraction
-- **Dual Methods** - API + HTML parsing for comprehensive results
-
-### 🎮 **Interactive Games**
-- **Number Guessing** with hints and attempt tracking
-- **Rock Paper Scissors** with tsundere reactions
-- **Trivia Games** with 30-second time limits
-- **Magic 8-Ball** with dramatic pauses and attitude
-
-### 🌐 **Real API Integration**
-- **Weather Data** from OpenWeatherMap
-- **Random Facts** from multiple sources
-- **Jokes API** integration (she'll act like they're stupid)
-- **Cat Facts** (she secretly loves them)
-
-### 💝 **Relationship System**
-- **Progressive Friendship**: Stranger → Acquaintance → Friend → Close Friend
-- **Interaction Tracking**: Remembers every conversation
-- **Personalized Responses**: Different reactions based on relationship level
-- **Persistent Data**: Saves relationship progress automatically
-
-### 🧠 **🆕 Memory System**
-- **Conversation History**: Remembers your previous chats for context
-- **User Preferences**: Learns your interests and adapts responses
-- **Memory Settings**: Customize how much the bot remembers (1-10 messages)
-- **Smart Context**: References past conversations naturally
-
-### ⏰ **🆕 Time-Based Features**
-- **Reminders**: Set personal reminders with natural language
-- **Subscriptions**: Daily facts, jokes, weekly stats, mood check-ins
-- **Persistent Scheduling**: Reminders survive bot restarts
-- **Smart Notifications**: Tsundere-style pings and mentions
-
-### 🛠️ **Server Management**
-- **Role Management**: Create, assign, and remove roles
-- **Channel Creation**: Text and voice channels
-- **User Moderation**: Kick users with tsundere attitude
-- **Message Relay**: Send messages to specific channels
+**[📖 Full Features List](./docs/MODULES.md)** | **[🎯 All Commands](./docs/commands.md)**
 
 ## 🚀 Quick Start
 
