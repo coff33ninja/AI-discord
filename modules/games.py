@@ -5,6 +5,8 @@ import random
 import asyncio
 import json
 import re
+from collections import deque
+from difflib import SequenceMatcher
 
 from .persona_manager import PersonaManager
 from .logger import BotLogger
@@ -20,6 +22,7 @@ MAGIC_8BALL_DELAY = 2
 TRIVIA_START_DELAY = 1
 NUMBER_GUESSING_TIMEOUT = 60  # Time limit for number guessing
 COUNTDOWN_INTERVAL = 5  # Announce every 5 seconds
+TRIVIA_SIMILARITY_THRESHOLD = 0.7  # Fuzzy match threshold (0-1)
 
 class TsundereGames:
     def __init__(self, persona_file="persona_card.json", api_manager=None, search=None, ai_db=None):
@@ -34,6 +37,8 @@ class TsundereGames:
         self.api_manager = api_manager
         self.search = search
         self.ai_db = ai_db
+        # Recent trivia cache to avoid repeating the same questions
+        self._recent_trivia = deque(maxlen=50)
 
     # Dependency injection helpers
     def set_api_manager(self, api_manager):
@@ -44,6 +49,55 @@ class TsundereGames:
 
     def set_ai_db(self, ai_db):
         self.ai_db = ai_db
+    
+    def _is_similar_question(self, new_question: str) -> bool:
+        """Check if new_question is similar to any recent trivia question using fuzzy matching."""
+        new_q = new_question.lower().strip()
+        for recent_q in self._recent_trivia:
+            # Use SequenceMatcher to compute similarity ratio
+            ratio = SequenceMatcher(None, new_q, recent_q).ratio()
+            if ratio >= TRIVIA_SIMILARITY_THRESHOLD:
+                return True
+        return False
+    
+    def _parse_answers(self, answer_str: str) -> list:
+        """Parse a single answer string that may contain multiple valid answers.
+        
+        Handles formats like:
+        - "Q" (single answer)
+        - "Q|The letter Q" (pipe-separated)
+        - "Q / the letter Q" (slash-separated)
+        - "Q, the letter Q" (comma-separated)
+        - "Q or the letter Q" (or-separated)
+        
+        Returns a list of normalized answer variants.
+        """
+        if not answer_str:
+            return []
+        
+        # Split by common delimiters
+        delimiters = [r'\|', r'/', r'\bor\b', ',']
+        variants = [answer_str]
+        
+        for delimiter in delimiters:
+            expanded = []
+            for variant in variants:
+                parts = re.split(delimiter, variant, flags=re.IGNORECASE)
+                expanded.extend(parts)
+            variants = expanded
+        
+        # Normalize: strip whitespace, lowercase
+        normalized = [v.strip().lower() for v in variants if v.strip()]
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique = []
+        for v in normalized:
+            if v not in seen:
+                seen.add(v)
+                unique.append(v)
+        
+        return unique if unique else []
     
     def _get_persona_response(self, category, subcategory, **format_kwargs):
         """Helper method to safely get persona responses from nested dictionaries"""
@@ -296,89 +350,143 @@ class TsundereGames:
         """
         # Static fallback pool
         questions = [
-            {"q": "What's the capital of Japan?", "a": "tokyo"},
+            {"q": "What's the capital of Japan?", "a": "tokyo | tokyo, japan"},
             {"q": "What's 7 x 8?", "a": "56"},
-            {"q": "What color do you get mixing red and blue?", "a": "purple"},
+            {"q": "What color do you get mixing red and blue?", "a": "purple | violet"},
             {"q": "How many days are in a leap year?", "a": "366"},
             {"q": "What's the largest planet in our solar system?", "a": "jupiter"}
         ]
 
         question_data = None
 
-        # 1) Try DB source if requested or available
-        if source != 'ai' and self.ai_db:
-            try:
-                db_entry = await self.ai_db.get_random_knowledge('trivia')
-            except Exception:
-                db_entry = None
+        # Attempt order: AI (preferred if available and not explicitly DB), then DB, then static
+        question_data = None
+        source_used = None
+        last_ai_resp = None
+        last_db_entry = None
 
-            if db_entry:
-                # Heuristic parsing of DB content into question/answer
+        # If user explicitly requested AI but API manager is missing, fail early
+        if source == 'ai' and not self.api_manager:
+            return self._get_persona_response('games', 'ai_unavailable') or "Sorry, AI is not available right now. Try again later."
+
+        MAX_ATTEMPTS = 6
+
+        # 1) Try AI first (if available and user didn't force DB)
+        if self.api_manager and source != 'db':
+            for attempt in range(MAX_ATTEMPTS):
+                try:
+                    prompt = (
+                        "Generate a single short trivia question with multiple acceptable answers. "
+                        "Return a JSON object with keys 'question' and 'answers'. "
+                        "'answers' should be an array of equivalent or acceptable answer variations. "
+                        "For example: {\"question\": \"What is the only letter that does not appear in any U.S. state name?\", "
+                        "\"answers\": [\"Q\", \"the letter Q\", \"letter Q\"]} "
+                        "Keep both concise. Provide at least 2 answer variants when possible."
+                    )
+                    ai_resp = await self.api_manager.generate_content(prompt)
+                    last_ai_resp = ai_resp
+                    parsed = None
+                    try:
+                        m = re.search(r"\{.*\}", ai_resp, flags=re.S)
+                        if m:
+                            parsed = json.loads(m.group(0))
+                        else:
+                            parsed = json.loads(ai_resp)
+                    except Exception:
+                        parsed = None
+
+                    candidate = None
+                    if parsed and isinstance(parsed, dict) and parsed.get('question'):
+                        question = parsed['question'].strip()
+                        # Handle both 'answers' (array) and 'answer' (string) keys
+                        answer_variants = parsed.get('answers') or [parsed.get('answer')]
+                        
+                        if isinstance(answer_variants, list):
+                            # Join multiple answers with pipe delimiter
+                            answer = ' | '.join([str(a).strip() for a in answer_variants if a])
+                        else:
+                            answer = str(answer_variants).strip()
+                        
+                        if question and answer:
+                            candidate = {'q': question, 'a': answer}
+                    else:
+                        # Fallback parsing for 'Question:' and 'Answer:' format
+                        if isinstance(ai_resp, str):
+                            qmatch = re.search(r"Question\s*[:\-]\s*(.+)", ai_resp, flags=re.I)
+                            amatch = re.search(r"Answer\s*[:\-]\s*(.+)", ai_resp, flags=re.I)
+                            if qmatch and amatch:
+                                candidate = {'q': qmatch.group(1).strip(), 'a': amatch.group(1).strip()}
+
+                    if candidate:
+                        if not self._is_similar_question(candidate['q']):
+                            question_data = candidate
+                            source_used = 'AI'
+                            break
+                        # else: we got a repeat, try again
+                except Exception:
+                    continue
+
+        # 2) Try DB if AI didn't yield or user requested DB
+        if not question_data and self.ai_db and source != 'ai':
+            for attempt in range(MAX_ATTEMPTS):
+                try:
+                    db_entry = await self.ai_db.get_random_knowledge('trivia')
+                    last_db_entry = db_entry
+                except Exception:
+                    db_entry = None
+
+                if not db_entry:
+                    break
+
                 key = db_entry.get('key_term') or ''
                 content = db_entry.get('content') or ''
 
                 q = None
                 a = None
-
-                # If content encodes question|answer
                 if '|' in content:
                     parts = [p.strip() for p in content.split('|', 1)]
                     if len(parts) == 2:
                         q, a = parts[0], parts[1]
-                # If multiple lines, prefer first two lines
                 elif '\n' in content:
                     parts = [p.strip() for p in content.splitlines() if p.strip()]
                     if len(parts) >= 2:
                         q, a = parts[0], parts[1]
-                # If key_term looks like a question, use it
                 if not q and key:
                     q = key
                     a = content
 
-                # If we successfully parsed a Q/A pair, use it
                 if q and a:
-                    question_data = {'q': q, 'a': a}
+                    if not self._is_similar_question(q):
+                        question_data = {'q': q, 'a': a}
+                        source_used = 'DB'
+                        break
+                    # else: repeat, try again
 
-        # 2) Try AI generation if requested or DB didn't yield
-        if source == 'ai' and not self.api_manager:
-            # User explicitly requested AI but API manager is not available
-            return self._get_persona_response('games', 'ai_unavailable') or "Sorry, AI is not available right now. Try again later."
-
-        if not question_data and self.api_manager and source != 'db':
-            try:
-                prompt = (
-                    "Generate a single short trivia question and its answer. "
-                    "Return only a JSON object with keys 'question' and 'answer'. "
-                    "Keep both concise. Example: {\"question\": \"...\", \"answer\": \"...\"}"
-                )
-                ai_resp = await self.api_manager.generate_content(prompt)
-                # Try to extract JSON from the response
-                parsed = None
-                try:
-                    # Find first JSON object in text
-                    m = re.search(r"\{.*\}", ai_resp, flags=re.S)
-                    if m:
-                        parsed = json.loads(m.group(0))
-                    else:
-                        parsed = json.loads(ai_resp)
-                except Exception:
-                    parsed = None
-
-                if parsed and isinstance(parsed, dict) and parsed.get('question') and parsed.get('answer'):
-                    question_data = {'q': parsed['question'].strip(), 'a': parsed['answer'].strip()}
-                else:
-                    # Fallback: try to parse 'Question:' and 'Answer:' lines
-                    if isinstance(ai_resp, str):
-                        qmatch = re.search(r"Question\s*:\s*(.+)", ai_resp, flags=re.I)
-                        amatch = re.search(r"Answer\s*:\s*(.+)", ai_resp, flags=re.I)
-                        if qmatch and amatch:
-                            question_data = {'q': qmatch.group(1).strip(), 'a': amatch.group(1).strip()}
-            except Exception:
-                question_data = None
-
-        # 3) Final fallback to static pool
+        # 3) Static fallback - prefer one not recently used
         if not question_data:
-            question_data = random.choice(questions)
+            candidate = None
+            for item in questions:
+                if not self._is_similar_question(item['q']):
+                    candidate = item
+                    break
+            if not candidate:
+                candidate = random.choice(questions)
+            question_data = {'q': candidate['q'], 'a': candidate['a']}
+            source_used = 'static'
+
+        # Record recent question to avoid repeats (store normalized version)
+        try:
+            self._recent_trivia.append(question_data['q'].lower().strip())
+        except Exception:
+            pass
+
+        # Persist AI-generated or static-seeded questions to DB for future reuse
+        if source_used in ('AI', 'static') and self.ai_db:
+            try:
+                # store key_term as question, content as answer
+                await self.ai_db.add_knowledge('trivia', question_data['q'], question_data['a'])
+            except Exception:
+                pass
         self.question_counter += 1
         question_id = self.question_counter
         
@@ -567,11 +675,20 @@ class TsundereGames:
 
         if qtype == 'trivia':
             correct_answer = question_data.get('answer')
+            # Parse multiple valid answers from the stored answer string
+            valid_answers = self._parse_answers(correct_answer)
+            if not valid_answers:
+                valid_answers = [correct_answer.lower().strip()]
+            
             # Separate correct and incorrect answers, sorted by time
             correct_users = []
             incorrect_users = []
             for user_id, answer_data in answers.items():
-                if str(answer_data['answer']).lower().strip() == str(correct_answer).lower().strip():
+                user_answer = str(answer_data['answer']).lower().strip()
+                # Check if user's answer matches any of the valid answers
+                is_correct = user_answer in valid_answers
+                
+                if is_correct:
                     correct_users.append((user_id, answer_data['time']))
                 else:
                     incorrect_users.append((user_id, answer_data['answer'], answer_data['time']))
