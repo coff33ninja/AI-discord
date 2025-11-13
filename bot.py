@@ -425,7 +425,7 @@ async def help_command(ctx):
             },
             {
                 'name': "**Games**",
-                'value': "`!game guess [max]` - Number guessing\n`!guess <number>` - Make a guess\n`!rps <choice>` (or `!rock`, `!paper`, `!scissors`) - Rock Paper Scissors\n`!8ball <question>` - Magic 8-ball\n`!trivia` - Start trivia game\n`!answer <answer>` - Answer trivia",
+                'value': "`!game guess [max]` - Number guessing\n`!guess <number>` - Make a guess\n`!rps <choice>` (or `!rock`, `!paper`, `!scissors`) - Rock Paper Scissors\n`!8ball <question>` - Magic 8-ball\n`!trivia` - Start a trivia question (30 seconds to answer)\n`!answer <answer>` - Answer the current trivia question",
                 'inline': False
             },
             {
@@ -973,7 +973,7 @@ async def start_game(ctx, game_type=None, max_number: int = 100):
         return
     
     if game_type.lower() == 'guess':
-        response = await games.start_number_guessing(ctx.author.id, max_number)
+        response = await games.start_number_guessing(ctx.author.id, max_number, ctx)
         await ctx.send(response)
     else:
         logger.warning(f"Unknown game type requested by user {ctx.author.id}: {game_type}")
@@ -1008,7 +1008,7 @@ async def magic_8ball(ctx, *, question):
     """Ask the magic 8-ball"""
     logger.info(f"8-ball command called by user {ctx.author.id}, question: {question[:50]}")
     async with ctx.typing():
-        response = await games.magic_8ball(question)
+        response = await games.magic_8ball(question, ctx)
     await ctx.send(response)
 
 @bot.command(name='trivia')
@@ -1016,7 +1016,7 @@ async def start_trivia(ctx):
     """Start a trivia game"""
     logger.info(f"Trivia command called by user {ctx.author.id}")
     async with ctx.typing():
-        response = await games.trivia_game(ctx.author.id)
+        response = await games.trivia_game(ctx.author.id, ctx)
     await ctx.send(response)
 
 @bot.command(name='answer')
