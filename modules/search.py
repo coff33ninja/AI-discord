@@ -96,16 +96,24 @@ Be informative but act annoyed about having to explain it. Include the most rele
             print(f"💥 AI analysis error: {e}")
             return f"Here's what I found about **{query}**:\n\n{search_results}"
     
-    async def search_duckduckgo(self, query, max_results=5):
+    async def search_duckduckgo(self, query, max_results=5, use_ai_analysis=True):
         """
-        Search DuckDuckGo and let AI analyze/summarize the results
-        Returns AI-powered analysis with persona flair
+        Unified search function that can return either AI analysis or formatted links
+        
+        Args:
+            query: Search query string
+            max_results: Maximum number of results to return
+            use_ai_analysis: If True, returns AI-powered analysis with persona flair.
+                           If False, returns formatted links with snippets
+        
+        Returns:
+            Search results either as AI analysis or formatted links
         """
         try:
-            print(f"🔍 Starting search for: {query}")
+            print(f"🔍 Starting search for: {query} (AI: {use_ai_analysis})")
             session = await self._get_session()
             
-            # DuckDuckGo Instant Answer API
+            # Try DuckDuckGo Instant Answer API first
             encoded_query = quote_plus(query)
             url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
             print(f"🌐 Requesting: {url}")
@@ -116,13 +124,7 @@ Be informative but act annoyed about having to explain it. Include the most rele
                     data = await response.json()
                     print(f"📊 Response keys: {list(data.keys())}")
                     
-                    # Debug logging (can be enabled for troubleshooting)
-                    debug_info = json.dumps({'query': query, 'response_keys': list(data.keys())}, indent=2)
-                    # Store debug info for potential error reporting
-                    if not data.get('Answer') and not data.get('Abstract') and not data.get('RelatedTopics') and not data.get('Definition'):
-                        print(f"Search debug - no results found: {debug_info}")
-                    
-                    # Check for instant answer
+                    # Check for instant answer (highest priority)
                     if data.get('Answer'):
                         print("✅ Found instant answer")
                         return self._format_instant_answer(query, data)
@@ -132,60 +134,41 @@ Be informative but act annoyed about having to explain it. Include the most rele
                         print("✅ Found abstract")
                         return self._format_abstract(query, data)
                     
-                    # Check for related topics
-                    elif data.get('RelatedTopics'):
-                        print(f"✅ Found {len(data['RelatedTopics'])} related topics")
-                        return self._format_related_topics(query, data, max_results)
-                    
                     # Check for definition
                     elif data.get('Definition'):
                         print("✅ Found definition")
                         return self._format_definition(query, data)
                     
+                    # Check for related topics
+                    elif data.get('RelatedTopics'):
+                        print(f"✅ Found {len(data['RelatedTopics'])} related topics")
+                        return self._format_related_topics(query, data, max_results)
+                    
                     else:
-                        # No results found - try web search with AI analysis
-                        print("❌ No instant results, trying web search with AI analysis...")
-                        raw_results = await self._get_raw_web_search(query, max_results)
-                        if raw_results:
-                            print("🤖 Getting AI analysis of search results...")
-                            ai_analysis = await self._get_ai_search_analysis(query, raw_results)
-                            return ai_analysis
-                        else:
-                            return self._get_no_results_response(query)
-                else:
-                    print(f"❌ API returned status {response.status}, trying web search with AI analysis...")
-                    raw_results = await self._get_raw_web_search(query, max_results)
-                    if raw_results:
+                        # No instant results - fall through to web search
+                        print("❌ No instant results, trying web search...")
+                
+                # If no instant results or API failed, try web search
+                print("🌐 Performing web search with HTML parsing...")
+                web_results = await self._perform_web_search(query, max_results)
+                
+                if web_results:
+                    if use_ai_analysis:
                         print("🤖 Getting AI analysis of search results...")
-                        ai_analysis = await self._get_ai_search_analysis(query, raw_results)
+                        ai_analysis = await self._get_ai_search_analysis(query, web_results['raw'])
                         return ai_analysis
                     else:
-                        return self._get_error_response(query)
+                        print("📋 Returning formatted web links...")
+                        return web_results['formatted']
+                else:
+                    return self._get_no_results_response(query)
                     
         except asyncio.TimeoutError:
-            print("⏰ API search timed out, trying web search with AI analysis...")
-            try:
-                raw_results = await self._get_raw_web_search(query, max_results)
-                if raw_results:
-                    print("🤖 Getting AI analysis of search results...")
-                    ai_analysis = await self._get_ai_search_analysis(query, raw_results)
-                    return ai_analysis
-                else:
-                    return self._get_timeout_response(query)
-            except Exception:
-                return self._get_timeout_response(query)
+            print("⏰ Search timed out")
+            return self._get_timeout_response(query)
         except Exception as e:
-            print(f"💥 API search error: {str(e)}, trying web search with AI analysis...")
-            try:
-                raw_results = await self._get_raw_web_search(query, max_results)
-                if raw_results:
-                    print("🤖 Getting AI analysis of search results...")
-                    ai_analysis = await self._get_ai_search_analysis(query, raw_results)
-                    return ai_analysis
-                else:
-                    return self._get_error_response(query, str(e))
-            except Exception:
-                return self._get_error_response(query, str(e))
+            print(f"💥 Search error: {str(e)}")
+            return self._get_error_response(query, str(e))
     
     def _format_instant_answer(self, query, data):
         """Format instant answer results"""
@@ -311,8 +294,15 @@ Be informative but act annoyed about having to explain it. Include the most rele
     
     async def web_search(self, query, max_results=3):
         """
-        Web search using DuckDuckGo's HTML interface with proper parsing
-        This provides more comprehensive results than the instant answer API
+        Web search returning formatted links with snippets (backward compatible)
+        This is a convenience method that calls search_duckduckgo with use_ai_analysis=False
+        """
+        return await self.search_duckduckgo(query, max_results, use_ai_analysis=False)
+    
+    async def _perform_web_search(self, query, max_results=3):
+        """
+        Unified web search that returns both raw and formatted results
+        Returns dict with 'raw' and 'formatted' keys for flexibility
         """
         try:
             print(f"🌐 Starting web search for: {query}")
@@ -347,22 +337,24 @@ Be informative but act annoyed about having to explain it. Include the most rele
                     return self._parse_search_results(query, html, max_results)
                 else:
                     print(f"❌ Bad web search response: {response.status}")
-                    return self._get_error_response(query)
+                    return None
                     
         except asyncio.TimeoutError:
             print("⏰ Web search timed out")
-            return self._get_timeout_response(query)
+            return None
         except Exception as e:
             print(f"💥 Web search error: {str(e)}")
-            return self._get_error_response(query, str(e))
+            return None
     
     def _parse_search_results(self, query, html, max_results):
         """
-        Parse HTML search results using BeautifulSoup for robust parsing
+        Parse HTML search results and return both formatted and raw versions
+        Returns dict with 'formatted' (for link output) and 'raw' (for AI analysis)
         """
         try:
             soup = BeautifulSoup(html, 'html.parser')
-            results = []
+            formatted_results = []
+            raw_results = []
             
             # Find all result containers
             result_containers = soup.find_all('div', class_='result')
@@ -388,120 +380,46 @@ Be informative but act annoyed about having to explain it. Include the most rele
                     snippet = ""
                     if snippet_elem:
                         snippet = snippet_elem.get_text(strip=True)
+                    
+                    # Format for links (Discord display)
+                    result_text = f"• **{title}**\n  🔗 {url}"
+                    if snippet:
                         # Truncate long snippets
                         if len(snippet) > 150:
                             snippet = snippet[:150] + "..."
-                    
-                    # Format result
-                    result_text = f"• **{title}**\n  🔗 {url}"
-                    if snippet:
                         result_text += f"\n  📝 {snippet}"
                     
-                    results.append(result_text)
+                    formatted_results.append(result_text)
+                    
+                    # Format for AI analysis (clean text)
+                    raw_text = f"Title: {title}\nURL: {url}"
+                    if snippet:
+                        raw_text += f"\nDescription: {snippet}"
+                    raw_results.append(raw_text)
                     
                 except Exception as e:
                     print(f"⚠️ Error parsing individual result: {e}")
                     continue
             
-            if results:
-                results_text = "\n\n".join(results)
+            if formatted_results:
+                formatted_text = "\n\n".join(formatted_results)
+                raw_text = "\n\n".join(raw_results)
                 
+                # Format the final response with persona
                 success_responses = self.persona_manager.persona.get("activity_responses", {}).get("search", {}).get("web_results", [])
                 
                 if success_responses:
-                    return random.choice(success_responses).format(query=query, results=results_text)
+                    formatted_output = random.choice(success_responses).format(query=query, results=formatted_text)
                 else:
-                    return f"**{query}**:\n\n{results_text}"
+                    formatted_output = f"**{query}**:\n\n{formatted_text}"
+                
+                return {
+                    'formatted': formatted_output,
+                    'raw': raw_text
+                }
             
-            return self._get_no_results_response(query)
+            return None
             
         except Exception as e:
             print(f"💥 HTML parsing error: {e}")
-            return self._get_error_response(query) 
-    async def _get_raw_web_search(self, query, max_results=3):
-        """Get raw search results for AI analysis"""
-        try:
-            print(f"🔍 Getting raw search results for AI analysis: {query}")
-            session = await self._get_session()
-            
-            # DuckDuckGo search with HTML parsing
-            search_url = "https://html.duckduckgo.com/html/"
-            params = {
-                'q': query,
-                'b': '',  # No ads
-                'kl': 'us-en',  # Language
-                'df': '',  # Date filter
-                's': '0',  # Start from first result
-            }
-            
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-            }
-            
-            async with session.post(search_url, data=params, headers=headers, timeout=15) as response:
-                if response.status == 200:
-                    html = await response.text()
-                    return self._extract_raw_results(html, max_results)
-                else:
-                    return None
-                    
-        except Exception as e:
-            print(f"💥 Raw search error: {str(e)}")
-            return None
-    
-    def _extract_raw_results(self, html, max_results):
-        """Extract clean text results for AI analysis"""
-        try:
-            soup = BeautifulSoup(html, 'html.parser')
-            results = []
-            
-            # Find all result containers
-            result_containers = soup.find_all('div', class_='result')
-            
-            for container in result_containers[:max_results]:
-                try:
-                    # Extract title and URL
-                    title_link = container.find('a', class_='result__a')
-                    if not title_link:
-                        continue
-                    
-                    title = title_link.get_text(strip=True)
-                    url = title_link.get('href', '')
-                    
-                    if not title:
-                        continue
-                    
-                    # Clean up the URL
-                    url = self._clean_url(url)
-                    
-                    # Extract snippet/description
-                    snippet_elem = container.find('a', class_='result__snippet')
-                    snippet = ""
-                    if snippet_elem:
-                        snippet = snippet_elem.get_text(strip=True)
-                    
-                    # Format for AI analysis (clean text)
-                    result_text = f"Title: {title}\nURL: {url}"
-                    if snippet:
-                        result_text += f"\nDescription: {snippet}"
-                    
-                    results.append(result_text)
-                    
-                except Exception as e:
-                    print(f"⚠️ Error extracting result: {e}")
-                    continue
-            
-            if results:
-                return "\n\n".join(results)
-            else:
-                return None
-                
-        except Exception as e:
-            print(f"💥 Raw extraction error: {e}")
-            return None
+            return None 

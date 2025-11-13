@@ -389,7 +389,8 @@ async def search_web(ctx, *, query):
         print(f"🔍 Search command called with query: {query}")
         
         async with ctx.typing():
-            response = await search.search_duckduckgo(query)
+            # Use AI analysis for the main search command
+            response = await search.search_duckduckgo(query, use_ai_analysis=True)
         
         print(f"📝 Search response: {response[:100]}...")
         
@@ -421,7 +422,8 @@ async def web_search_command(ctx, *, query):
         print(f"🌐 Web search command called with query: {query}")
         
         async with ctx.typing():
-            response = await search.web_search(query)
+            # Use formatted links for the web search command
+            response = await search.search_duckduckgo(query, use_ai_analysis=False)
         
         print(f"📝 Web search response: {response[:100]}...")
         
