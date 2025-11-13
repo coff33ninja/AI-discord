@@ -118,6 +118,22 @@ async def on_ready():
     logger.info(f"API manager initialized: {status['total_keys']} keys, current key #{status['current_key']}")
     print(f"🔑 Using {status['total_keys']} API key(s), currently on key #{status['current_key']}")
     
+    # Send startup message to subscribed channels
+    try:
+        event_subscriptions = await time_utils.get_subscriptions_by_type("events")
+        logger.info(f"Found {len(event_subscriptions)} channels subscribed to events")
+        
+        for sub in event_subscriptions:
+            try:
+                channel = bot.get_channel(int(sub['channel_id']))
+                if channel:
+                    await channel.send("✅ **Bot is starting up!** I'm back online and ready to help!")
+                    logger.info(f"Sent startup message to channel {sub['channel_id']}")
+            except Exception as e:
+                logger.warning(f"Error sending startup message to channel {sub['channel_id']}: {e}")
+    except Exception as e:
+        logger.warning(f"Error getting event subscriptions for startup message: {e}")
+    
     # Set bot status with fallback using dynamic bot name
     try:
         bot_name = persona_manager.get_name()
@@ -785,7 +801,7 @@ async def subscribe_feature(ctx, feature_type: str):
     try:
         logger.info(f"Subscribe command called by user {ctx.author.id} for {feature_type}")
         
-        valid_features = ['daily_fact', 'daily_joke', 'weekly_stats', 'mood_check']
+        valid_features = ['daily_fact', 'daily_joke', 'weekly_stats', 'mood_check', 'events']
         
         if feature_type not in valid_features:
             await ctx.send(persona_manager.get_validation_response("invalid_feature", features=', '.join(valid_features)))
@@ -803,7 +819,8 @@ async def subscribe_feature(ctx, feature_type: str):
                 'daily_fact': 'daily facts',
                 'daily_joke': 'daily jokes',
                 'weekly_stats': 'weekly statistics',
-                'mood_check': 'mood check-ins'
+                'mood_check': 'mood check-ins',
+                'events': 'bot startup and shutdown notifications'
             }
             feature_name = feature_names.get(feature_type, feature_type)
             try:
@@ -983,7 +1000,7 @@ async def start_game(ctx, game_type=None, max_number: int = 100):
 async def make_guess(ctx, number: int):
     """Make a guess in the number game"""
     logger.info(f"Guess command called by user {ctx.author.id}, number: {number}")
-    response = await games.guess_number(ctx.author.id, number)
+    response = await games.guess_number(ctx.author.id, number, ctx)
     await ctx.send(response)
 
 @bot.command(name='rps', aliases=['rock', 'paper', 'scissors'])
@@ -1000,7 +1017,7 @@ async def rock_paper_scissors(ctx, choice=None):
         await ctx.send(persona_manager.get_response("missing_args") + " Pick rock, paper, or scissors! Try `!rps rock` or just `!rock`!")
         return
     
-    response = await games.rock_paper_scissors(choice)
+    response = await games.rock_paper_scissors(choice, ctx.author.id, ctx)
     await ctx.send(response)
 
 @bot.command(name='8ball')
@@ -1019,11 +1036,11 @@ async def start_trivia(ctx):
         response = await games.trivia_game(ctx.author.id, ctx)
     await ctx.send(response)
 
-@bot.command(name='answer')
+@bot.command(name='answer', aliases=['g'])
 async def answer_trivia(ctx, *, answer):
-    """Answer the trivia question"""
+    """Answer the current game question - works for trivia, number guessing, etc. Alias: !g"""
     logger.info(f"Answer command called by user {ctx.author.id}, answer: {answer[:50]}")
-    response = await games.answer_trivia(ctx.author.id, answer)
+    response = await games.answer(ctx.author.id, answer, ctx)
     await ctx.send(response)
 
 # Server Action Commands
@@ -1279,6 +1296,22 @@ async def shutdown_bot(ctx):
                 fallback = "Shutting down now. Goodbye!"
             await ctx.send(fallback)
         print(f"Bot shutdown requested by {ctx.author}")
+        
+        # Send shutdown message to subscribed channels
+        try:
+            event_subscriptions = await time_utils.get_subscriptions_by_type("events")
+            logger.info(f"Sending shutdown message to {len(event_subscriptions)} subscribed channels")
+            
+            for sub in event_subscriptions:
+                try:
+                    channel = bot.get_channel(int(sub['channel_id']))
+                    if channel:
+                        await channel.send("🛑 **Bot is shutting down!** I'll be back online soon!")
+                        logger.info(f"Sent shutdown message to channel {sub['channel_id']}")
+                except Exception as e:
+                    logger.warning(f"Error sending shutdown message to channel {sub['channel_id']}: {e}")
+        except Exception as e:
+            logger.warning(f"Error getting event subscriptions for shutdown message: {e}")
         
         # Save any pending data and close search session
         social.save_user_data()

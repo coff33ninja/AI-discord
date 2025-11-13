@@ -378,6 +378,36 @@ class TimeBasedUtilities:
         except Exception as e:
             logger.error(f"Error loading existing reminders: {e}")
     
+    async def get_subscriptions_by_type(self, subscription_type: str) -> List[Dict]:
+        """Get all active subscriptions of a specific type"""
+        try:
+            import aiosqlite
+            async with aiosqlite.connect(ai_db.db_path) as db:
+                cursor = await db.execute("""
+                    SELECT * FROM user_subscriptions 
+                    WHERE subscription_type = ? AND is_active = TRUE
+                    ORDER BY created_at DESC
+                """, (subscription_type,))
+                
+                rows = await cursor.fetchall()
+                columns = [description[0] for description in cursor.description]
+                
+                subscriptions = []
+                for row in rows:
+                    sub = dict(zip(columns, row))
+                    if sub['subscription_data']:
+                        try:
+                            sub['subscription_data'] = json.loads(sub['subscription_data'])
+                        except Exception:
+                            pass
+                    subscriptions.append(sub)
+                
+                return subscriptions
+                
+        except Exception as e:
+            logger.error(f"Error getting subscriptions of type {subscription_type}: {e}")
+            return []
+    
     def parse_time_input(self, time_input: str) -> Optional[datetime]:
         """Parse various time input formats"""
         try:

@@ -70,7 +70,7 @@ class TsundereGames:
         
         return f"{start_text} I picked a number between 1 and {max_number}. Try to guess it! You have {NUMBER_GUESSING_TIMEOUT} seconds."
     
-    async def guess_number(self, user_id, guess):
+    async def guess_number(self, user_id, guess, ctx=None):
         """Process a number guess"""
         if user_id not in self.active_games or self.active_games[user_id]['type'] != 'number_guess':
             logger.info(f"No active number guessing game for user {user_id}")
@@ -87,7 +87,18 @@ class TsundereGames:
             del self.active_games[user_id]
             logger.info(f"User {user_id} won number guessing game in {attempts} attempts")
             persona_msg = self._get_persona_response("games", "win")
-            return f"{persona_msg or self.persona_manager.get_game_response('number_guess', 'win')} It was {secret} in {attempts} tries!"
+            response = f"{persona_msg or self.persona_manager.get_game_response('number_guess', 'win')} It was {secret} in {attempts} tries!"
+            # Announce winner to channel
+            if ctx:
+                user_name = None
+                try:
+                    user = await ctx.bot.fetch_user(user_id)
+                    user_name = user.name if hasattr(user, 'name') else str(user_id)
+                except Exception:
+                    user_name = str(user_id)
+                if user_name:
+                    await ctx.send(f"🏆 **{user_name}** guessed the number correctly ({secret}) in {attempts} attempts!")
+            return response
         elif guess < secret:
             persona_msg = self._get_persona_response("games", "hint_low")
             return persona_msg or self.persona_manager.get_game_response("number_guess", "hint_low")
@@ -95,7 +106,7 @@ class TsundereGames:
             persona_msg = self._get_persona_response("games", "hint_high")
             return persona_msg or self.persona_manager.get_game_response("number_guess", "hint_high")
     
-    async def rock_paper_scissors(self, user_choice):
+    async def rock_paper_scissors(self, user_choice, user_id=None, ctx=None):
         """Play rock paper scissors"""
         choices = ['rock', 'paper', 'scissors']
         bot_choice = random.choice(choices)
@@ -107,19 +118,40 @@ class TsundereGames:
             logger.warning(f"Invalid choice in rock-paper-scissors: {user_choice}")
             return self.persona_manager.get_validation_response("rps_choice")
         
+        # Get username for announcement
+        user_name = None
+        if ctx and user_id:
+            try:
+                user = await ctx.bot.fetch_user(user_id)
+                user_name = user.name if hasattr(user, 'name') else str(user_id)
+            except Exception:
+                user_name = str(user_id)
+        
         if user_choice == bot_choice:
             persona_msg = self._get_persona_response("games", "tie", choice=bot_choice)
-            return persona_msg or self.persona_manager.get_game_response("rps", "tie", choice=bot_choice)
+            response = persona_msg or self.persona_manager.get_game_response("rps", "tie", choice=bot_choice)
+            # Announce tie to channel
+            if ctx and user_name:
+                await ctx.send(f"🤝 **{user_name}** and bot both chose **{bot_choice}** - it's a tie!")
+            return response
         elif (user_choice == 'rock' and bot_choice == 'scissors') or \
              (user_choice == 'paper' and bot_choice == 'rock') or \
              (user_choice == 'scissors' and bot_choice == 'paper'):
             logger.info("Rock-paper-scissors: user won")
             persona_msg = self._get_persona_response("games", "win")
-            return f"{persona_msg or self.persona_manager.get_game_response('rps', 'win')} You picked {user_choice}, I picked {bot_choice}."
+            response = f"{persona_msg or self.persona_manager.get_game_response('rps', 'win')} You picked {user_choice}, I picked {bot_choice}."
+            # Announce winner to channel
+            if ctx and user_name:
+                await ctx.send(f"🎉 **{user_name}** won! {user_choice} beats {bot_choice}!")
+            return response
         else:
             logger.info("Rock-paper-scissors: bot won")
             persona_msg = self._get_persona_response("games", "lose")
-            return f"{persona_msg or self.persona_manager.get_game_response('rps', 'lose')} I picked {bot_choice}, you picked {user_choice}."
+            response = f"{persona_msg or self.persona_manager.get_game_response('rps', 'lose')} I picked {bot_choice}, you picked {user_choice}."
+            # Announce bot win to channel
+            if ctx and user_name:
+                await ctx.send(f"🤖 Bot won against **{user_name}**! {bot_choice} beats {user_choice}!")
+            return response
     
     async def magic_8ball(self, question, ctx=None):
         """Magic 8-ball with persona responses and countdown"""
@@ -165,8 +197,10 @@ class TsundereGames:
             'answer': question_data['a'],
             'start_time': asyncio.get_event_loop().time(),
             'answered_users': set(),
+            'answers': {},  # {user_id: {'answer': answer_text, 'time': elapsed_time}}
             'timer_id': timer_id,
-            'ctx': ctx  # Store context for countdown announcements
+            'ctx': ctx,  # Store context for countdown announcements
+            'game_over': False  # Flag to indicate if timer has completed
         }
         
         # Store user-specific game reference
@@ -185,13 +219,13 @@ class TsundereGames:
         
         # Start countdown announcements in background
         if ctx:
-            countdown_task = asyncio.create_task(self._countdown_timer(timer_id, ctx, TRIVIA_TIMEOUT, "trivia"))
+            countdown_task = asyncio.create_task(self._countdown_timer(timer_id, ctx, TRIVIA_TIMEOUT, "trivia", question_id))
             self.active_timers[timer_id] = countdown_task
         
         return initial_message
     
-    async def _countdown_timer(self, timer_id, ctx, timeout_duration, game_name):
-        """Generic countdown timer that announces every COUNTDOWN_INTERVAL seconds"""
+    async def _countdown_timer(self, timer_id, ctx, timeout_duration, game_name, question_id=None):
+        """Generic countdown timer that announces every COUNTDOWN_INTERVAL seconds, then tallies results"""
         start_time = asyncio.get_event_loop().time()
         announced_times = set()
         
@@ -201,7 +235,11 @@ class TsundereGames:
                 remaining = timeout_duration - elapsed
                 
                 if remaining <= 0:
-                    # Timer finished
+                    # Timer finished - tally results if this is a timed game with questions
+                    if question_id and question_id in self.active_questions:
+                        question_data = self.active_questions[question_id]
+                        question_data['game_over'] = True
+                        await self._tally_game_results(question_id, ctx, game_name)
                     if timer_id in self.active_timers:
                         del self.active_timers[timer_id]
                     break
@@ -221,8 +259,8 @@ class TsundereGames:
             if timer_id in self.active_timers:
                 del self.active_timers[timer_id]
     
-    async def answer_trivia(self, user_id, answer):
-        """Process trivia answer with timing"""
+    async def answer_trivia(self, user_id, answer, ctx=None):
+        """Collect trivia answer - stores it for later tallying when timer completes"""
         if user_id not in self.active_games or self.active_games[user_id]['type'] != 'trivia':
             logger.info(f"No active trivia game for user {user_id}")
             persona_msg = self._get_persona_response("games", "no_active_game")
@@ -235,38 +273,137 @@ class TsundereGames:
             del self.active_games[user_id]
             return "The trivia question expired. Start a new one with !trivia"
         
-        # Check if user already answered this question
-        if user_id in self.active_questions[question_id]['answered_users']:
-            logger.info(f"User {user_id} attempted to answer question {question_id} twice")
-            return "You already answered this question, baka! Wait for the next one!"
-        
         question_data = self.active_questions[question_id]
         elapsed_time = asyncio.get_event_loop().time() - question_data['start_time']
-        correct_answer = question_data['answer']
         
-        # Check timeout BEFORE processing answer
-        if elapsed_time > TRIVIA_TIMEOUT:
-            logger.info(f"Trivia answer timed out for user {user_id}")
-            del self.active_games[user_id]
-            persona_msg = self._get_persona_response("games", "trivia_timeout", answer=correct_answer)
-            return persona_msg or self.persona_manager.get_game_response("trivia", "timeout", answer=correct_answer)
+        # Check if user already answered this question
+        if user_id in question_data['answered_users']:
+            logger.info(f"User {user_id} attempted to answer question {question_id} twice")
+            return "You already answered this question, baka! Wait for the results!"
         
-        # Mark user as answered
+        # Check if game is already over
+        if question_data['game_over']:
+            logger.info(f"Attempted answer after game over for user {user_id}")
+            return "Time's up! Results are being tallied..."
+        
+        # Store the answer for later tallying
         question_data['answered_users'].add(user_id)
+        question_data['answers'][user_id] = {
+            'answer': answer,
+            'time': elapsed_time
+        }
         del self.active_games[user_id]
         
-        logger.info(f"Trivia answer for user {user_id}: answered '{answer}', correct is '{correct_answer}', time: {elapsed_time:.1f}s")
+        logger.info(f"Trivia answer collected for user {user_id}: '{answer}' at {elapsed_time:.1f}s")
         
-        if answer.lower().strip() == correct_answer:
-            if elapsed_time < TRIVIA_FAST_THRESHOLD:
-                logger.info(f"User {user_id} answered trivia fast: {elapsed_time:.1f}s")
-                persona_msg = self._get_persona_response("games", "trivia_fast_correct", time=int(elapsed_time))
-                return persona_msg or f"Wow, {elapsed_time:.1f}s! Impressive!"
-            else:
-                logger.info(f"User {user_id} answered trivia correctly: {elapsed_time:.1f}s")
-                persona_msg = self._get_persona_response("games", "trivia_correct", time=int(elapsed_time))
-                return persona_msg or f"Correct! You took {elapsed_time:.1f}s."
+        # Get username for acknowledgment
+        user_name = None
+        if ctx:
+            try:
+                user = await ctx.bot.fetch_user(user_id)
+                user_name = user.name if hasattr(user, 'name') else str(user_id)
+            except Exception:
+                user_name = str(user_id)
+        
+        # Send acknowledgment but don't reveal if correct/wrong yet
+        persona_msg = self._get_persona_response("games", "answer_received")
+        response = persona_msg or "✓ Answer received! Waiting for timer to complete..."
+        
+        # Optionally announce that someone answered
+        if ctx and user_name:
+            await ctx.send(f"📝 **{user_name}** submitted an answer!")
+        
+        return response
+        
+    
+        async def _tally_game_results(self, question_id, ctx, game_name):
+            """Tally results for all players who answered - called when timer completes"""
+            if question_id not in self.active_questions:
+                logger.warning(f"Question {question_id} not found for tallying")
+                return
+        
+            question_data = self.active_questions[question_id]
+            correct_answer = question_data['answer']
+            answers = question_data['answers']
+        
+            if not answers:
+                # No one answered
+                if ctx:
+                    await ctx.send(f"⏰ Time's up! No one answered. The answer was **{correct_answer}**!")
+                logger.info(f"No answers submitted for question {question_id}")
+                del self.active_questions[question_id]
+                return
+        
+            # Separate correct and incorrect answers, sorted by time
+            correct_users = []
+            incorrect_users = []
+        
+            for user_id, answer_data in answers.items():
+                if answer_data['answer'].lower().strip() == correct_answer:
+                    correct_users.append((user_id, answer_data['time']))
+                else:
+                    incorrect_users.append((user_id, answer_data['answer'], answer_data['time']))
+        
+            # Sort by time (fastest first)
+            correct_users.sort(key=lambda x: x[1])
+        
+            # Announce results
+            if ctx:
+                # Announce correct answers
+                if correct_users:
+                    if len(correct_users) == 1:
+                        user_id, elapsed_time = correct_users[0]
+                        user = await ctx.bot.fetch_user(user_id)
+                        user_name = user.name if hasattr(user, 'name') else str(user_id)
+                    
+                        if elapsed_time < TRIVIA_FAST_THRESHOLD:
+                            await ctx.send(f"🎉 **{user_name}** got it right in {elapsed_time:.1f} seconds! That's lightning fast!")
+                        else:
+                            await ctx.send(f"🏆 **{user_name}** answered correctly in {elapsed_time:.1f} seconds!")
+                    else:
+                        # Multiple correct answers
+                        winners = []
+                        for user_id, elapsed_time in correct_users:
+                            user = await ctx.bot.fetch_user(user_id)
+                            user_name = user.name if hasattr(user, 'name') else str(user_id)
+                            winners.append(f"**{user_name}** ({elapsed_time:.1f}s)")
+                        await ctx.send(f"🏆 Correct answers: {', '.join(winners)}")
+                else:
+                    # No correct answers
+                    await ctx.send(f"⏰ Time's up! No one got it right. The answer was **{correct_answer}**!")
+            
+                # Announce a few incorrect answers
+                if incorrect_users and len(correct_users) > 0:  # Only show wrong answers if someone got it right
+                    incorrect_users.sort(key=lambda x: x[2])  # Sort by time
+                    sample = incorrect_users[:2]  # Show up to 2 incorrect answers
+                    wrong_answers = []
+                    for user_id, answer, elapsed_time in sample:
+                        user = await ctx.bot.fetch_user(user_id)
+                        user_name = user.name if hasattr(user, 'name') else str(user_id)
+                        wrong_answers.append(f"**{user_name}**: '{answer}'")
+                    if wrong_answers:
+                        await ctx.send(f"❌ Some close tries: {', '.join(wrong_answers)}")
+        
+            logger.info(f"Trivia results for question {question_id}: {len(correct_users)} correct, {len(incorrect_users)} incorrect")
+            del self.active_questions[question_id]
+    
+    async def answer(self, user_id, answer, ctx=None):
+        """Generic answer handler for all game types - routes to appropriate game handler"""
+        if user_id not in self.active_games:
+            logger.info(f"No active game for user {user_id}")
+            return "You don't have an active game! Start one with !trivia, !guess, or !8ball"
+        
+        game_type = self.active_games[user_id].get('type')
+        logger.info(f"Generic answer handler: user {user_id}, game type: {game_type}, answer: {answer[:50]}")
+        
+        if game_type == 'trivia':
+            return await self.answer_trivia(user_id, answer, ctx)
+        elif game_type == 'number_guess':
+            # Convert answer to int for number guessing
+            try:
+                guess = int(answer)
+                return await self.guess_number(user_id, guess, ctx)
+            except ValueError:
+                return "That's not a valid number! Try again with a whole number."
         else:
-            logger.info(f"User {user_id} answered trivia wrong")
-            persona_msg = self._get_persona_response("games", "trivia_wrong", answer=correct_answer)
-            return persona_msg or f"Wrong! The answer was {correct_answer}."
+            return f"Unknown game type: {game_type}"
