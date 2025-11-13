@@ -2,13 +2,33 @@
 """
 Development runner for Discord AI Bot
 Automatically restarts the bot when files are modified
+
+⚠️ NOTE: Requires watchdog library and Python 3.10-3.12
+         For Python 3.13, use: python bot.py (no auto-restart)
 """
 
 import sys
 import time
 import subprocess
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+
+# Check Python version compatibility
+python_version = sys.version_info
+if python_version.minor == 13:
+    print("⚠️  WARNING: Python 3.13 has watchdog threading issues!")
+    print("✅ SOLUTION: Downgrade to Python 3.12 or use: python bot.py")
+    print("\nTo fix:")
+    print("  uv python install 3.12.4")
+    print("  uv venv --python 3.12.4")
+    sys.exit(1)
+
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+except ImportError:
+    print("❌ watchdog not installed!")
+    print("Install with: uv pip install watchdog==6.0.0")
+    print("Or run normally with: python bot.py")
+    sys.exit(1)
 
 class BotRestartHandler(FileSystemEventHandler):
     def __init__(self, restart_callback):
@@ -69,13 +89,20 @@ class BotRunner:
         """Start watching for file changes"""
         print("👀 Watching for file changes...")
         handler = BotRestartHandler(self.restart_bot)
-        self.observer = Observer()
         
-        # Watch current directory and modules
-        self.observer.schedule(handler, ".", recursive=False)
-        self.observer.schedule(handler, "modules", recursive=True)
-        
-        self.observer.start()
+        try:
+            self.observer = Observer()
+            
+            # Watch current directory and modules
+            self.observer.schedule(handler, ".", recursive=False)
+            self.observer.schedule(handler, "modules", recursive=True)
+            
+            self.observer.start()
+        except Exception as e:
+            print(f"❌ Error starting file watcher: {e}")
+            print("💡 Tip: Make sure watchdog is installed: uv pip install watchdog==6.0.0")
+            print("    Or use Python 3.12 instead of 3.13")
+            raise
         
     def run(self):
         """Main run loop"""
@@ -103,21 +130,19 @@ class BotRunner:
         except KeyboardInterrupt:
             print("\n🛑 Shutting down...")
             
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+            
         finally:
             self.stop_bot()
             if self.observer:
-                self.observer.stop()
-                self.observer.join()
+                try:
+                    self.observer.stop()
+                    self.observer.join(timeout=5)
+                except Exception as e:
+                    print(f"⚠️  Error stopping observer: {e}")
             print("👋 Goodbye!")
 
 if __name__ == "__main__":
-    # Check if watchdog is installed
-    import importlib.util
-    if importlib.util.find_spec("watchdog") is None:
-        print("❌ watchdog not installed!")
-        print("Install with: pip install watchdog")
-        print("Or run normally with: python bot.py")
-        sys.exit(1)
-        
     runner = BotRunner()
     runner.run()
