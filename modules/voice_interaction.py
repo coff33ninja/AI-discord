@@ -4,11 +4,9 @@ Full voice conversation pipeline: STT → AI → TTS
 Users can speak in voice channels and get AI responses with voice synthesis.
 """
 
-import asyncio
 import logging
-from typing import Optional, Callable
+from typing import Optional
 
-import discord
 from discord.ext import commands
 
 from modules.stt_manager import get_stt_manager, STTManager

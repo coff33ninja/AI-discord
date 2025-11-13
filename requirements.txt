@@ -6,10 +6,11 @@ requests==2.32.4
 beautifulsoup4==4.12.2
 aiosqlite==0.19.0  # Async SQLite for AI database
 
-# TTS dependencies
-# Install KittenTTS wheel: https://github.com/KittenML/KittenTTS/releases/download/0.1/kittentts-0.1.0-py3-none-any.whl
+# Voice AI dependencies
+# TTS: Install KittenTTS wheel: https://github.com/KittenML/KittenTTS/releases/download/0.1/kittentts-0.1.0-py3-none-any.whl
 soundfile==0.12.1  # Audio file I/O
-numpy>=1.21.0  # Required by soundfile
+numpy>=1.21.0  # Required by soundfile and Whisper
+openai-whisper>=20250625  # Speech-to-text using OpenAI Whisper
 
 # Development dependencies (optional)
 watchdog==3.0.0  # For auto-restart on file changes
