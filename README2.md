@@ -204,6 +204,17 @@ The bot remembers users and builds relationships:
 | **Friend** | 20-49 | More caring, still denies it |
 | **Close Friend** | 50+ | Very caring, extremely flustered |
 
+## 🚀 Future Plans
+
+Want to see what's coming next? Check out the [full roadmap](./docs/ROADMAP.md) with exciting features planned:
+- 🎵 Voice Integration & Music Bot
+- 🎨 Visual Enhancements & Avatar Expressions
+- 🧠 Advanced AI with Emotion Recognition
+- 🎮 Enhanced Gaming with RPG Elements
+- 🌐 Smart Integrations (Calendar, GitHub, Spotify)
+- 📊 Advanced Analytics & Insights
+- ...and much more!
+
 ## 🤝 Contributing
 
 Contributions welcome! Feel free to submit a Pull Request.
