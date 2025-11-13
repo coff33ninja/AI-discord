@@ -105,6 +105,32 @@ def install_requirements_with_uv():
         print("❌ Failed to install requirements with uv!")
         return False
 
+def install_kittentts():
+    """Install KittenTTS from GitHub release for Python 3.12"""
+    print("\n🎤 Installing KittenTTS (Voice TTS Support)...")
+    
+    if sys.version_info < (3, 12):
+        print("⚠️  KittenTTS requires Python 3.12+")
+        print("   Current version: {}.{}".format(sys.version_info.major, sys.version_info.minor))
+        print("   Skipping KittenTTS installation...")
+        return False
+    
+    try:
+        kittentts_wheel = "https://github.com/KittenML/KittenTTS/releases/download/0.1/kittentts-0.1.0-py3-none-any.whl"
+        print(f"   Installing from: {kittentts_wheel}")
+        subprocess.check_call(["uv", "pip", "install", kittentts_wheel])
+        print("✅ KittenTTS installed successfully!")
+        print("   Voice TTS/STT features are now available!")
+        return True
+    except subprocess.CalledProcessError:
+        print("⚠️  Failed to install KittenTTS")
+        print("   You can install it manually later with:")
+        print("   uv pip install https://github.com/KittenML/KittenTTS/releases/download/0.1/kittentts-0.1.0-py3-none-any.whl")
+        return False
+    except Exception as e:
+        print(f"⚠️  Error installing KittenTTS: {e}")
+        return False
+
 def validate_requirements_compatibility():
     """Validate that all requirements are compatible with Python 3.12"""
     print("\n🔍 Validating requirements compatibility for Python 3.12...")
@@ -196,6 +222,9 @@ def main():
     if not install_requirements_with_uv():
         return False
     
+    # Install KittenTTS for Python 3.12 voice support
+    install_kittentts()  # Optional, but recommended for voice features
+    
     # Setup environment file
     if not setup_env_file():
         return False
@@ -208,10 +237,14 @@ def main():
     print("1. Edit .env file with your API keys")
     print("2. Activate venv: .venv\\Scripts\\activate (Windows) or source .venv/bin/activate (Linux/Mac)")
     print("3. Run: python bot.py")
+    print("\n🎤 Voice Features:")
+    print("   KittenTTS (TTS) was automatically installed for Python 3.12")
+    print("   Whisper (STT) is included for speech recognition")
+    print("   Ready to use: !join_voice, !listen, !speak commands")
     print("\n💡 Using uv for faster installs and synced dependencies!")
     print("   To update packages: uv pip install --upgrade <package>")
     print("   To sync all: uv pip install -r requirements.txt")
-    print("   To install new Python: uv python install 3.13")
+    print("   To install new Python: uv python install 3.12")
     
     return True
 

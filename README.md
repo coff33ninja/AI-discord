@@ -23,29 +23,40 @@ A Discord bot with a classic tsundere personality powered by Google's Gemini AI.
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.12+ (recommended for all features including voice)
 - [Discord Bot Token](https://discord.com/developers/applications)
 - [Google Gemini API Key](https://makersuite.google.com/app/apikey)
 
-### Installation
+### Installation (Automated)
+
+The **setup.py** script handles everything automatically:
 
 ```bash
 # Clone repository
 git clone https://github.com/coff33ninja/AI-discord.git
 cd AI-discord
 
-# Install dependencies
-pip install -r requirements.txt
+# Run setup (handles: venv, dependencies, KittenTTS voice)
+python setup.py
 
-# Create .env file
-echo "DISCORD_BOT_TOKEN=your_token_here" > .env
-echo "GEMINI_API_KEY=your_key_here" >> .env
+# Create .env file with your API keys
+# Then activate venv and run:
+.venv\Scripts\activate          # Windows
+# or
+source .venv/bin/activate       # macOS/Linux
 
-# Run bot
+# Run the bot
 python bot.py
 ```
 
-**📚 [Full Setup Guide](./docs/setup/)**
+✨ **What setup.py does:**
+- ✅ Creates virtual environment with Python 3.12
+- ✅ Installs all dependencies with UV
+- ✅ **Automatically installs KittenTTS for voice support**
+- ✅ Validates Python compatibility
+- ✅ Sets up .env template
+
+**📚 [Full Setup Guide](./docs/setup/INSTALLATION.md)**
 
 ## 📖 Documentation
 
