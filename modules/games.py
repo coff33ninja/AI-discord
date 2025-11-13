@@ -143,77 +143,35 @@ class TsundereGames:
 
         term_clean = str(term).strip()
 
-        # 1) Try DB search for related knowledge
+        # 1) Try DB search for related knowledge (supports both knowledge_manager and legacy ai_db)
+        results = []
         try:
             if self.knowledge_manager:
-                try:
-                    results = await self.knowledge_manager.search_knowledge(term_clean, limit=max_facts)
-                except Exception:
-                    results = []
+                results = await self.knowledge_manager.search_knowledge(term_clean, limit=max_facts)
             elif self.ai_db:
-                try:
-                    results = await self.ai_db.search_knowledge(term_clean, limit=max_facts)
-                except Exception:
-                    results = []
-
-                for r in results:
-                    content = r.get('content') or ''
-                    # Take the first sentence to keep facts short
-                    first_sentence = re.split(r'[\.\n]', content.strip())[0].strip()
-                    if first_sentence:
-                        facts.append(first_sentence)
-                    if len(facts) >= max_facts:
-                        break
-                if facts:
-                    return facts
+                results = await self.ai_db.search_knowledge(term_clean, limit=max_facts)
         except Exception:
-            # DB search failed; fall through to AI
-            pass
+            results = []
 
-        # 2) Fall back to AI-generated facts
+        # Process DB results into short sentences
         try:
-            if self.api_manager:
-                prompt = (
-                    f"Provide {max_facts} concise, single-line trivia facts about '{term_clean}'. "
-                    "Return only a JSON array named 'facts' when possible, or plain newline-separated lines. "
-                    "Keep each fact short (one sentence, ~10-20 words)."
-                )
-                ai_resp = await self.api_manager.generate_content(prompt)
-                # Try to parse JSON array
-                parsed = None
-                try:
-                    m = re.search(r"\{.*\}\s*$", ai_resp, flags=re.S)
-                    if m:
-                        # attempt to find array inside
-                        arr_match = re.search(r"\[.*\]", m.group(0), flags=re.S)
-                        if arr_match:
-                            parsed = json.loads(arr_match.group(0))
-                        else:
-                            # maybe the whole response is a JSON array
-                            parsed = json.loads(ai_resp)
-                    else:
-                        # try direct JSON array
-                        parsed = json.loads(ai_resp)
-                except Exception:
-                    parsed = None
-
-                if isinstance(parsed, list):
-                    for item in parsed:
-                        if isinstance(item, str) and item.strip():
-                            facts.append(item.strip())
-                        if len(facts) >= max_facts:
-                            break
+            for r in results or []:
+                content = ''
+                if isinstance(r, dict):
+                    content = r.get('content') or r.get('text') or ''
                 else:
-                    # Fallback: split by lines and take short ones
-                    lines = [ln.strip('-* \t') for ln in re.split(r"\r?\n", ai_resp) if ln.strip()]
-                    for ln in lines:
-                        # ignore empty lines
-                        if ln:
-                            facts.append(ln.strip())
-                        if len(facts) >= max_facts:
-                            break
-
-                # Final sanitization: keep unique, short facts
+                    content = str(r)
+                # Take the first sentence to keep facts short
+                first_sentence = re.split(r'[\.\n]', content.strip())[0].strip()
+                # sanitize common noisy characters
+                first_sentence = re.sub(r'^\s+|\s+$', '', first_sentence)
+                first_sentence = first_sentence.strip('`')
+                if first_sentence:
+                    facts.append(first_sentence)
+                if len(facts) >= max_facts:
+                    break
+            if facts:
+                # return unique facts
                 unique = []
                 seen = set()
                 for f in facts:
@@ -223,7 +181,77 @@ class TsundereGames:
                         unique.append(s)
                 return unique[:max_facts]
         except Exception:
-            return []
+            # ignore DB processing errors and fall back to AI
+            pass
+
+        # 2) Fall back to AI-generated facts. The AI may return JSON; parse it robustly
+        if self.api_manager:
+            try:
+                prompt = (
+                    f"Provide {max_facts} concise, single-line trivia facts about '{term_clean}'. "
+                    "Prefer plain newline-separated sentences. If you must return structured data, return a top-level JSON object containing a 'facts' array. "
+                    "Keep each fact short (one sentence, ~8-25 words)."
+                )
+                ai_resp = await self.api_manager.generate_content(prompt)
+
+                # Try direct JSON parse first
+                parsed = None
+                try:
+                    parsed = json.loads(ai_resp)
+                except Exception:
+                    parsed = None
+
+                extracted = []
+                # If parsed JSON is a dict with 'facts' key or an array, extract strings
+                if isinstance(parsed, dict):
+                    arr = parsed.get('facts') or parsed.get('Facts') or []
+                    if isinstance(arr, list):
+                        extracted = [str(x).strip() for x in arr if str(x).strip()]
+                elif isinstance(parsed, list):
+                    extracted = [str(x).strip() for x in parsed if str(x).strip()]
+
+                # If direct parse failed, try to locate a JSON fragment that contains a 'facts' array
+                if not extracted:
+                    try:
+                        # Look for a JSON object containing "facts": [ ... ]
+                        obj_match = re.search(r'(\{[^\}]*"facts"\s*:\s*\[.*?\][^\}]*\})', ai_resp, flags=re.S | re.I)
+                        if obj_match:
+                            obj = obj_match.group(1)
+                            maybe = json.loads(obj)
+                            arr = maybe.get('facts') or []
+                            if isinstance(arr, list):
+                                extracted = [str(x).strip() for x in arr if str(x).strip()]
+                    except Exception:
+                        extracted = []
+
+                # If still nothing, fallback to line-splitting the AI text (remove bullets/numbering/markdown)
+                if not extracted:
+                    lines = [re.sub(r'^[\-\*\d\.\)\s]+', '', ln).strip(' `') for ln in ai_resp.splitlines() if ln.strip()]
+                    for ln in lines:
+                        if ln:
+                            extracted.append(ln)
+                        if len(extracted) >= max_facts:
+                            break
+
+                # Final sanitization: dedupe, trim, and return plain sentences (no JSON)
+                final = []
+                seen = set()
+                for item in extracted:
+                    s = re.sub(r'\s+', ' ', str(item).strip()).strip('`').strip()
+                    if not s:
+                        continue
+                    # Remove accidental trailing punctuation beyond a single period
+                    s = re.sub(r'[\s\t]+$', '', s)
+                    if s.endswith(',') or s.endswith(';'):
+                        s = s[:-1].strip()
+                    if s not in seen:
+                        seen.add(s)
+                        final.append(s)
+                    if len(final) >= max_facts:
+                        break
+                return final[:max_facts]
+            except Exception:
+                return []
 
         return []
     
@@ -875,8 +903,37 @@ class TsundereGames:
                     if (self.ai_db or self.api_manager) and key_term:
                         facts = await self._fetch_additional_facts(key_term, max_facts=3)
                         if facts:
-                            facts_display = "\n".join([f"- {f}" for f in facts])
-                            await ctx.send(f"📚 Additional facts about **{key_term}**:\n{facts_display}")
+                            # Sanitize each fact to ensure plain-text, single-line bullets
+                            sanitized = []
+                            for f in facts:
+                                if not isinstance(f, str):
+                                    f = str(f)
+                                # remove surrounding JSON brackets/braces if present
+                                f = f.strip()
+                                if (f.startswith('{') and f.endswith('}')) or (f.startswith('[') and f.endswith(']')):
+                                    # try to extract inner text heuristically
+                                    inner = re.sub(r'^[\[{\s\n]+|[\]}\s\n]+$', '', f)
+                                    f = inner
+                                # collapse whitespace and remove stray backticks
+                                f = re.sub(r'\s+', ' ', f).strip(' `')
+                                # remove trailing commas or semicolons
+                                if f.endswith(',') or f.endswith(';'):
+                                    f = f[:-1].strip()
+                                if f:
+                                    sanitized.append(f)
+
+                            # Build a single human-readable message with bullets
+                            facts_display = "\n".join([f"- {line}" for line in sanitized])
+                            try:
+                                await ctx.send(f"📚 Additional facts about **{key_term}**:\n{facts_display}")
+                            except Exception:
+                                # As a last resort, send a compact single-line summary
+                                try:
+                                    compact = ' | '.join([s for s in sanitized[:3]])
+                                    await ctx.send(f"📚 Facts about **{key_term}**: {compact}")
+                                except Exception:
+                                    # swallow errors to avoid breaking result flow
+                                    pass
                 except Exception:
                     # Don't let facts retrieval break result flow
                     logger.exception("Failed to fetch additional facts")
