@@ -183,6 +183,20 @@ python dev_bot.py
 | `!unsubscribe <feature>` | Unsubscribe from features | `!unsubscribe daily_joke` |
 | `!subscriptions` | List your subscriptions | `!subscriptions` |
 
+### 🎤 **🆕 Voice Interaction** *(Beta)*
+| Command | Description | Example |
+|---------|-------------|---------|
+| `!join_voice` | Bot joins your voice channel | `!join_voice` |
+| `!leave_voice` | Bot leaves voice channel | `!leave_voice` |
+| `!listen` | Bot listens for speech (transcribes & responds) | `!listen` |
+| `!stop_listening` | Stop listening | `!stop_listening` |
+| `!speak <text>` | Bot speaks text aloud | `!speak Hello everyone!` |
+| `!voice_ask <question>` | Ask question with voice response | `!voice_ask What time is it?` |
+| `!voice_history` | Show conversation history | `!voice_history` |
+| `!clear_voice_history` | Clear history | `!clear_voice_history` |
+
+📖 **[See Voice Integration Docs](./docs/voice/)** for full setup and usage
+
 ### ⚙️ **Admin Commands** *(admin only)*
 | Command | Description | Example |
 |---------|-------------|---------|
@@ -497,6 +511,18 @@ The bot is constantly evolving! Here are some exciting features planned for futu
 - **AI Art Generation** - Custom tsundere artwork based on conversations
 - **Dream Journal** - The bot remembers and discusses your shared "dreams"
 - **Time Capsules** - Messages that unlock after specified time periods
+
+---
+
+## 📚 Documentation
+
+Documentation is organized by category in the `/docs` folder:
+
+- **[`/docs/voice/`](./docs/voice/)** - Voice interaction features (STT, TTS, integration)
+- **[`/docs/setup/`](./docs/setup/)** - Setup guides for TTS and dependencies
+- **[`/docs/api/`](./docs/api/)** - API integration documentation
+
+Each module contains detailed docstrings explaining functions, classes, and usage patterns.
 
 ---
 
