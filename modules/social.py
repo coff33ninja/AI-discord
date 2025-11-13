@@ -6,9 +6,18 @@ import json
 import os
 from .persona_manager import PersonaManager
 
+# Constants for relationship tracking
+USER_DATA_FILE = "user_relationships.json"
+RELATIONSHIP_THRESHOLDS = {
+    'close_friend': 50,
+    'friend': 20,
+    'acquaintance': 5,
+    'stranger': 0
+}
+
 class TsundereSocial:
     def __init__(self, persona_file="persona_card.json"):
-        self.user_data_file = "user_relationships.json"
+        self.user_data_file = USER_DATA_FILE
         self.user_data = self.load_user_data()
         self.persona_manager = PersonaManager(persona_file)
     
@@ -16,19 +25,20 @@ class TsundereSocial:
         """Load user relationship data"""
         if os.path.exists(self.user_data_file):
             try:
-                with open(self.user_data_file, 'r') as f:
+                with open(self.user_data_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except (json.JSONDecodeError, IOError):
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"⚠️ Error loading user data: {e}")
                 return {}
         return {}
     
     def save_user_data(self):
         """Save user relationship data"""
         try:
-            with open(self.user_data_file, 'w') as f:
+            with open(self.user_data_file, 'w', encoding='utf-8') as f:
                 json.dump(self.user_data, f, indent=2)
-        except (IOError, OSError):
-            pass
+        except (IOError, OSError) as e:
+            print(f"⚠️ Error saving user data: {e}")
     
     def get_user_relationship(self, user_id):
         """Get relationship level with user"""
@@ -42,18 +52,21 @@ class TsundereSocial:
         return self.user_data[user_id]
     
     def update_interaction(self, user_id):
-        """Update interaction count"""
+        """Update interaction count and relationship level"""
         user_id = str(user_id)
         data = self.get_user_relationship(user_id)
         data['interactions'] += 1
+        interactions = data['interactions']
         
-        # Update relationship level based on interactions
-        if data['interactions'] >= 50:
+        # Update relationship level based on interaction thresholds
+        if interactions >= RELATIONSHIP_THRESHOLDS['close_friend']:
             data['relationship_level'] = 'close_friend'
-        elif data['interactions'] >= 20:
+        elif interactions >= RELATIONSHIP_THRESHOLDS['friend']:
             data['relationship_level'] = 'friend'
-        elif data['interactions'] >= 5:
+        elif interactions >= RELATIONSHIP_THRESHOLDS['acquaintance']:
             data['relationship_level'] = 'acquaintance'
+        else:
+            data['relationship_level'] = 'stranger'
         
         self.save_user_data()
         return data

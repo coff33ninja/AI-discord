@@ -33,11 +33,15 @@ class TsundereUtilities:
     async def get_weather(self, location):
         """Get weather info using OpenWeatherMap API"""
         try:
-            # Using OpenWeatherMap free API (you'd need to add API key to .env)
-            api_key = "demo_key"  # Replace with real API key
-            url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={api_key}&units=metric"
+            if not isinstance(location, str) or not location.strip():
+                return "Please provide a valid location."
             
-            response = requests.get(url, timeout=5)
+            params = {
+                "q": location,
+                "appid": DEFAULT_API_KEY,
+                "units": "metric"
+            }
+            response = requests.get(OPENWEATHERMAP_API_URL, params=params, timeout=DEFAULT_TIMEOUT)
             
             if response.status_code == 200:
                 data = response.json()
@@ -46,111 +50,130 @@ class TsundereUtilities:
                 feels_like = data['main']['feels_like']
                 
                 weather_info = f"{temp}°C with {description}. Feels like {feels_like}°C"
-                return self.persona_manager.get_activity_response("weather", "success", 
-                                                                location=location, 
-                                                                weather_info=weather_info)
+                persona_msg = self._get_persona_response("utilities", "weather", location=location, weather_info=weather_info)
+                return persona_msg or f"Weather in {location}: {weather_info}"
             else:
-                return self.persona_manager.get_activity_response("weather", "error", location=location)
+                return f"Could not find weather for {location}."
                 
         except requests.exceptions.Timeout:
-            return self.persona_manager.get_activity_response("weather", "error", location=location)
-        except requests.exceptions.RequestException:
-            return self.persona_manager.get_activity_response("weather", "error", location=location)
-        except Exception:
-            return self.persona_manager.get_activity_response("weather", "error", location=location)
+            return "Weather API request timed out."
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Weather API error: {e}")
+            return "I couldn't get the weather info right now..."
     
-    async def roll_dice(self, sides=6):
+    async def roll_dice(self, sides=DEFAULT_DICE_SIDES):
         """Roll dice with persona-driven attitude"""
-        result = random.randint(1, sides)
-        frustration = self.persona_manager.get_speech_pattern("frustrated")
-        insult = self.persona_manager.get_speech_pattern("insults")
-        return f"{frustration} " + self.persona_manager.get_activity_response("utilities", "dice", result=result, insult=insult)
+        try:
+            # Validate sides parameter (2-1000 range)
+            if not isinstance(sides, int) or sides < 2 or sides > 1000:
+                return f"Please specify a valid number of sides (2-1000)."
+            
+            result = random.randint(1, sides)
+            persona_msg = self._get_persona_response("utilities", "dice", result=result, sides=sides)
+            return persona_msg or f"You rolled a {result}!"
+        except (TypeError, ValueError):
+            return "Invalid dice parameters."
     
     async def get_time(self):
         """Get current time with persona flair"""
-        now = datetime.datetime.now()
-        time_str = now.strftime("%I:%M %p")
-        insult = self.persona_manager.get_speech_pattern("insults")
-        return self.persona_manager.get_activity_response("utilities", "time", time=time_str, insult=insult)
+        try:
+            now = datetime.datetime.now()
+            time_str = now.strftime("%I:%M %p")
+            persona_msg = self._get_persona_response("utilities", "time", time=time_str)
+            return persona_msg or f"The current time is {time_str}."
+        except Exception as e:
+            print(f"⚠️ Error getting time: {e}")
+            return "I couldn't get the time right now..."
     
     async def flip_coin(self):
         """Flip a coin with persona attitude"""
-        result = random.choice(["Heads", "Tails"])
-        reluctant = self.persona_manager.get_speech_pattern("reluctant_help")
-        insult = self.persona_manager.get_speech_pattern("insults")
-        return f"{reluctant} " + self.persona_manager.get_activity_response("utilities", "coin", result=result, insult=insult)
+        try:
+            result = random.choice(["Heads", "Tails"])
+            persona_msg = self._get_persona_response("utilities", "coin", result=result)
+            return persona_msg or f"The coin landed on {result}!"
+        except Exception as e:
+            print(f"⚠️ Error flipping coin: {e}")
+            return "I couldn't flip the coin right now..."
     
     async def calculate(self, expression):
         """Safe calculator with persona-driven responses"""
         try:
+            if not isinstance(expression, str):
+                return "Please provide a valid math expression."
+            
+            if len(expression) > 200:
+                return "Expression is too long. Keep it under 200 characters."
+            
             # Simple safe evaluation for basic math
             allowed_chars = set('0123456789+-*/.() ')
             if not all(c in allowed_chars for c in expression):
-                return self.persona_manager.get_activity_response("calculation", "error")
+                return "Invalid characters in expression. Only math operators allowed."
             
             result = eval(expression)
-            return self.persona_manager.get_activity_response("calculation", "success", 
-                                                            expression=expression, 
-                                                            result=result)
-        except:
-            return self.persona_manager.get_activity_response("calculation", "error")   
+            persona_msg = self._get_persona_response("utilities", "calculate", expression=expression, result=result)
+            return persona_msg or f"{expression} = {result}"
+        except ZeroDivisionError:
+            return "Cannot divide by zero!"
+        except (SyntaxError, ValueError) as e:
+            return f"Invalid expression: {str(e)}"
+        except Exception as e:
+            print(f"⚠️ Calculation error: {e}")
+            return "I couldn't calculate that..."
+    
     async def get_random_fact(self):
         """Get a random fact using an API"""
         try:
-            url = "https://uselessfacts.jsph.pl/random.json?language=en"
-            response = requests.get(url, timeout=5)
+            response = requests.get(RANDOM_FACTS_API_URL, timeout=DEFAULT_TIMEOUT)
             
             if response.status_code == 200:
                 data = response.json()
                 fact = data['text']
-                
-                success_responses = self.persona_manager.persona.get("activity_responses", {}).get("facts", {}).get("success", ["Here's a fact: {fact}"])
-                return random.choice(success_responses).format(fact=fact)
+                persona_msg = self._get_persona_response("utilities", "fact", fact=fact)
+                return persona_msg or f"Here's a fact: {fact}"
             else:
-                error_responses = self.persona_manager.persona.get("activity_responses", {}).get("facts", {}).get("error", ["Can't get facts right now!"])
-                return random.choice(error_responses)
+                return "Couldn't fetch a fact right now."
                 
-        except (requests.exceptions.Timeout, requests.exceptions.RequestException, Exception):
-            error_responses = self.persona_manager.persona.get("activity_responses", {}).get("facts", {}).get("error", ["Can't get facts right now!"])
-            return random.choice(error_responses)
+        except requests.exceptions.Timeout:
+            return "Fact API request timed out."
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Fact API error: {e}")
+            return "Can't get facts right now!"
     
     async def get_joke(self):
         """Get a random joke using an API"""
         try:
-            url = "https://official-joke-api.appspot.com/random_joke"
-            response = requests.get(url, timeout=5)
+            response = requests.get(JOKES_API_URL, timeout=DEFAULT_TIMEOUT)
             
             if response.status_code == 200:
                 data = response.json()
                 setup = data['setup']
                 punchline = data['punchline']
-                
-                success_responses = self.persona_manager.persona.get("activity_responses", {}).get("jokes", {}).get("success", ["Here's a joke: {setup}\n{punchline}"])
-                return random.choice(success_responses).format(setup=setup, punchline=punchline)
+                persona_msg = self._get_persona_response("utilities", "joke", setup=setup, punchline=punchline)
+                return persona_msg or f"Here's a joke:\n{setup}\n{punchline}"
             else:
-                error_responses = self.persona_manager.persona.get("activity_responses", {}).get("jokes", {}).get("error", ["Can't get jokes right now!"])
-                return random.choice(error_responses)
+                return "Couldn't fetch a joke right now."
                 
-        except (requests.exceptions.Timeout, requests.exceptions.RequestException, Exception):
-            error_responses = self.persona_manager.persona.get("activity_responses", {}).get("jokes", {}).get("error", ["Can't get jokes right now!"])
-            return random.choice(error_responses)
+        except requests.exceptions.Timeout:
+            return "Joke API request timed out."
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Joke API error: {e}")
+            return "Can't get jokes right now!"
     
     async def get_cat_fact(self):
         """Get a random cat fact"""
         try:
-            url = "https://catfact.ninja/fact"
-            response = requests.get(url, timeout=5)
+            response = requests.get(CAT_FACTS_API_URL, timeout=DEFAULT_TIMEOUT)
             
             if response.status_code == 200:
                 data = response.json()
                 fact = data['fact']
-                
-                success_responses = self.persona_manager.persona.get("activity_responses", {}).get("cat_facts", {}).get("success", ["Here's a cat fact: {fact}"])
-                return random.choice(success_responses).format(fact=fact)
+                persona_msg = self._get_persona_response("utilities", "cat_fact", fact=fact)
+                return persona_msg or f"Here's a cat fact: {fact}"
             else:
-                error_responses = self.persona_manager.persona.get("activity_responses", {}).get("cat_facts", {}).get("error", ["Can't get cat facts right now!"])
-                return random.choice(error_responses)
+                return "Couldn't fetch a cat fact right now."
                 
-        except (requests.exceptions.Timeout, requests.exceptions.RequestException, Exception):
-            error_responses = self.persona_manager.persona.get("activity_responses", {}).get("cat_facts", {}).get("error", ["Can't get cat facts right now!"])
-            return random.choice(error_responses)
+        except requests.exceptions.Timeout:
+            return "Cat fact API request timed out."
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Cat fact API error: {e}")
+            return "Can't get cat facts right now!"

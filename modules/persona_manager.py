@@ -4,6 +4,13 @@ Persona Manager - Centralized personality system using persona cards
 import json
 import random
 
+# Constants for persona management
+DEFAULT_PERSONA_FILE = "persona_card.json"
+DEFAULT_PERSONA_NAME = "AI Assistant"
+DEFAULT_PERSONA_PERSONALITY = "helpful"
+DEFAULT_AI_PROMPT = "You are a helpful AI assistant."
+AI_GENERATION_TIMEOUT = 15.0  # seconds
+
 class PersonaManager:
     def __init__(self, persona_file="persona_card.json"):
         self.persona_file = persona_file
@@ -24,14 +31,14 @@ class PersonaManager:
     def get_default_persona(self):
         """Fallback default persona"""
         return {
-            "name": "AI Assistant",
-            "personality": "helpful",
-            "ai_system_prompt": "You are a helpful AI assistant."
+            "name": DEFAULT_PERSONA_NAME,
+            "personality": DEFAULT_PERSONA_PERSONALITY,
+            "ai_system_prompt": DEFAULT_AI_PROMPT
         }
     
     def get_name(self):
         """Get persona name"""
-        return self.persona.get("name", "AI Assistant")
+        return self.persona.get("name", DEFAULT_PERSONA_NAME)
     
     def get_ai_prompt(self, user_question, relationship_level="stranger"):
         """Generate AI system prompt with full persona card context"""
@@ -119,7 +126,7 @@ Generate an authentic response as the character described in the persona card.""
                 try:
                     response = await asyncio.wait_for(
                         loop.run_in_executor(executor, model.generate_content, prompt),
-                        timeout=15.0  # 15 second timeout for quick responses
+                        timeout=AI_GENERATION_TIMEOUT
                     )
                     return response.text.strip()
                 except asyncio.TimeoutError:

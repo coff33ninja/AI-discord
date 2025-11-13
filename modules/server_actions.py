@@ -5,26 +5,43 @@ import discord
 import re
 from .persona_manager import PersonaManager
 
+# Regex patterns for Discord mentions
+USER_MENTION_REGEX = r'<@!?(\d+)>'
+CHANNEL_MENTION_REGEX = r'<#(\d+)>'
+
 class TsundereServerActions:
     def __init__(self, persona_file="persona_card.json"):
         self.persona_manager = PersonaManager(persona_file)
     
+    def _parse_user_mention(self, ctx, user_mention):
+        """Helper method to extract user ID from mention string and get member object"""
+        if hasattr(user_mention, 'mention'):
+            # It's a discord.Member object already
+            return user_mention
+        
+        # It's a mention string, extract user ID
+        user_id = re.findall(USER_MENTION_REGEX, user_mention)
+        if not user_id:
+            return None
+        
+        user = ctx.guild.get_member(int(user_id[0]))
+        return user
+    
+    def _parse_channel_mention(self, ctx, channel_mention):
+        """Helper method to extract channel ID from mention string and get channel object"""
+        channel_id = re.findall(CHANNEL_MENTION_REGEX, channel_mention)
+        if not channel_id:
+            return None
+        
+        channel = ctx.guild.get_channel(int(channel_id[0]))
+        return channel
+    
     async def mention_user(self, ctx, user_mention, message=None):
         """Mention a user with a message"""
         try:
-            # Handle both discord.Member objects and mention strings
-            if hasattr(user_mention, 'mention'):
-                # It's a discord.Member object
-                user = user_mention
-            else:
-                # It's a mention string, extract user ID
-                user_id = re.findall(r'<@!?(\d+)>', user_mention)
-                if not user_id:
-                    return self.persona_manager.get_response("missing_args")
-                
-                user = ctx.guild.get_member(int(user_id[0]))
-                if not user:
-                    return self.persona_manager.get_activity_response("server_actions", "user_not_found")
+            user = self._parse_user_mention(ctx, user_mention)
+            if not user:
+                return self.persona_manager.get_response("missing_args")
             
             if message:
                 response = f"{user.mention} {message}"
@@ -71,19 +88,9 @@ class TsundereServerActions:
             if not ctx.author.guild_permissions.manage_roles:
                 return self.persona_manager.get_activity_response("server_actions", "no_permission")
             
-            # Handle both discord.Member objects and mention strings
-            if hasattr(user_mention, 'mention'):
-                # It's a discord.Member object
-                user = user_mention
-            else:
-                # It's a mention string, extract user ID
-                user_id = re.findall(r'<@!?(\d+)>', user_mention)
-                if not user_id:
-                    return self.persona_manager.get_response("missing_args")
-                
-                user = ctx.guild.get_member(int(user_id[0]))
-                if not user:
-                    return self.persona_manager.get_activity_response("server_actions", "user_not_found")
+            user = self._parse_user_mention(ctx, user_mention)
+            if not user:
+                return self.persona_manager.get_response("missing_args")
             
             # Find role
             role = discord.utils.get(ctx.guild.roles, name=role_name)
@@ -110,19 +117,9 @@ class TsundereServerActions:
             if not ctx.author.guild_permissions.manage_roles:
                 return self.persona_manager.get_activity_response("server_actions", "no_permission")
             
-            # Handle both discord.Member objects and mention strings
-            if hasattr(user_mention, 'mention'):
-                # It's a discord.Member object
-                user = user_mention
-            else:
-                # It's a mention string, extract user ID
-                user_id = re.findall(r'<@!?(\d+)>', user_mention)
-                if not user_id:
-                    return self.persona_manager.get_response("missing_args")
-                
-                user = ctx.guild.get_member(int(user_id[0]))
-                if not user:
-                    return self.persona_manager.get_activity_response("server_actions", "user_not_found")
+            user = self._parse_user_mention(ctx, user_mention)
+            if not user:
+                return self.persona_manager.get_response("missing_args")
             
             # Find role
             role = discord.utils.get(ctx.guild.roles, name=role_name)
@@ -149,19 +146,9 @@ class TsundereServerActions:
             if not ctx.author.guild_permissions.kick_members:
                 return self.persona_manager.get_activity_response("server_actions", "no_permission")
             
-            # Handle both discord.Member objects and mention strings
-            if hasattr(user_mention, 'mention'):
-                # It's a discord.Member object
-                user = user_mention
-            else:
-                # It's a mention string, extract user ID
-                user_id = re.findall(r'<@!?(\d+)>', user_mention)
-                if not user_id:
-                    return self.persona_manager.get_response("missing_args")
-                
-                user = ctx.guild.get_member(int(user_id[0]))
-                if not user:
-                    return self.persona_manager.get_activity_response("server_actions", "user_not_found")
+            user = self._parse_user_mention(ctx, user_mention)
+            if not user:
+                return self.persona_manager.get_response("missing_args")
             
             if user == ctx.author:
                 return self.persona_manager.get_activity_response("server_actions", "cant_kick_self")
@@ -205,14 +192,9 @@ class TsundereServerActions:
     async def send_message_to_channel(self, ctx, channel_mention, message):
         """Send a message to a specific channel"""
         try:
-            # Extract channel ID from mention
-            channel_id = re.findall(r'<#(\d+)>', channel_mention)
-            if not channel_id:
-                return self.persona_manager.get_response("missing_args")
-            
-            channel = ctx.guild.get_channel(int(channel_id[0]))
+            channel = self._parse_channel_mention(ctx, channel_mention)
             if not channel:
-                return self.persona_manager.get_activity_response("server_actions", "channel_not_found")
+                return self.persona_manager.get_response("missing_args")
             
             await channel.send(message)
             

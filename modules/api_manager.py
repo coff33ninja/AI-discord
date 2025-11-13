@@ -9,9 +9,20 @@ import google.generativeai as genai
 from typing import List, Optional
 import json
 from datetime import datetime, timedelta
+import concurrent.futures
+
+# Constants for API management
+DEFAULT_RATE_LIMIT_PER_KEY = 60  # Requests per minute
+DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
+API_REQUEST_TIMEOUT = 30.0  # seconds
+API_GENERATION_TIMEOUT = 15.0  # seconds for faster responses
+KEY_COOLDOWN_DURATION = 10  # minutes
+ERROR_COOLDOWN_DURATION = 5  # minutes
+ERROR_THRESHOLD = 3  # errors before cooldown
+MAX_RETRIES = 3
 
 class GeminiAPIManager:
-    def __init__(self, api_keys: List[str] = None, rate_limit_per_key: int = 60):
+    def __init__(self, api_keys: List[str] = None, rate_limit_per_key: int = DEFAULT_RATE_LIMIT_PER_KEY):
         """
         Initialize the API manager with rotating keys
         
@@ -77,7 +88,7 @@ class GeminiAPIManager:
         
         # Create or get cached model
         if self.current_key_index not in self.models:
-            self.models[self.current_key_index] = genai.GenerativeModel('gemini-2.5-flash')
+            self.models[self.current_key_index] = genai.GenerativeModel(DEFAULT_GEMINI_MODEL)
         
         return self.models[self.current_key_index]
     
@@ -141,12 +152,12 @@ class GeminiAPIManager:
             usage['last_error'] = error
             
             # If too many errors, put key in cooldown
-            if usage['errors'] >= 3:
-                cooldown_time = datetime.now() + timedelta(minutes=5)
+            if usage['errors'] >= ERROR_THRESHOLD:
+                cooldown_time = datetime.now() + timedelta(minutes=ERROR_COOLDOWN_DURATION)
                 self.key_cooldowns[self.current_key_index] = cooldown_time
                 print(f"⚠️ API key #{self.current_key_index + 1} in cooldown due to errors")
     
-    async def generate_content(self, prompt: str, max_retries: int = 3) -> Optional[str]:
+    async def generate_content(self, prompt: str, max_retries: int = MAX_RETRIES) -> Optional[str]:
         """
         Generate content with automatic key rotation and retry logic
         
@@ -176,13 +187,12 @@ class GeminiAPIManager:
                 
                 # Run the blocking API call in a thread pool with timeout
                 loop = asyncio.get_event_loop()
-                import concurrent.futures
                 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     try:
                         response = await asyncio.wait_for(
                             loop.run_in_executor(executor, model.generate_content, prompt),
-                            timeout=30.0
+                            timeout=API_REQUEST_TIMEOUT
                         )
                         
                         # Record successful request
@@ -208,7 +218,7 @@ class GeminiAPIManager:
                 # Check if it's a rate limit error
                 if "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
                     # Put current key in cooldown and try next
-                    cooldown_time = datetime.now() + timedelta(minutes=10)
+                    cooldown_time = datetime.now() + timedelta(minutes=KEY_COOLDOWN_DURATION)
                     self.key_cooldowns[self.current_key_index] = cooldown_time
                     print(f"⚠️ API key #{self.current_key_index + 1} hit rate limit, cooling down")
                     
