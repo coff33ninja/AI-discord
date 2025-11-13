@@ -14,7 +14,31 @@ def check_python_version():
     if sys.version_info < (3, 12):
         print("❌ Python 3.12 or higher is required!")
         print(f"Current version: {sys.version}")
-        return False
+        print("\n🔧 Would you like to install Python 3.12 using uv?")
+        print("   This will download and install Python 3.12 alongside your current version.")
+        print("   You can then use it for this project specifically.")
+        
+        response = input("\nInstall Python 3.12 with uv? (y/N): ").strip().lower()
+        if response == 'y':
+            print("\n📦 Installing uv first (if not already installed)...")
+            if not install_uv():
+                print("❌ Could not install uv. Please install manually: https://github.com/astral-sh/uv")
+                return False
+            
+            print("\n🔧 Installing Python 3.12 with uv...")
+            if install_python_3_12():
+                print("\n✅ Python 3.12 installation started!")
+                print("   Please restart your terminal and run setup.py again to continue.")
+                return False
+            else:
+                print("\n❌ Python 3.12 installation failed.")
+                print("   Please install Python 3.12 manually from: https://www.python.org/downloads/")
+                return False
+        else:
+            print("\n❌ Python 3.12 is required. Exiting.")
+            print("   Please install Python 3.12 from: https://www.python.org/downloads/")
+            print("   Or use uv to install it: uv python install 3.12")
+            return False
     
     current_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     print(f"✅ Python version: {current_version}")
@@ -32,26 +56,20 @@ def check_python_version():
 
 def install_python_3_12():
     """Install Python 3.12 using uv"""
-    print("\n🔧 Installing Python 3.12 with uv...")
     try:
         # Use uv to download and install Python 3.12
         subprocess.check_call(["uv", "python", "install", "3.12"])
         print("✅ Python 3.12 installed successfully!")
-        print("\n📝 You may need to restart your terminal to use the new Python version.")
-        print("   After restart, run setup.py again to complete the setup.")
-        return False  # Return False to exit and let user restart
+        return True
     except FileNotFoundError:
-        print("⚠️  uv not found in PATH - installing uv first...")
-        if install_uv():
-            return install_python_3_12()
-        else:
-            print("❌ Could not install Python 3.12. Please visit: https://www.python.org/")
-            return False
+        print("⚠️  uv not found in PATH")
+        return False
     except subprocess.CalledProcessError:
-        print("⚠️  Could not install Python 3.13 via uv.")
-        print("   Please manually download from: https://www.python.org/")
-        response = input("Continue with current Python version? (y/N): ").lower()
-        return response == 'y'
+        print("⚠️  Could not install Python 3.12 via uv.")
+        return False
+    except Exception as e:
+        print(f"⚠️  Error: {e}")
+        return False
 
 def install_uv():
     """Install uv package manager"""
@@ -80,6 +98,99 @@ def check_uv_installed():
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
+
+def check_existing_venv():
+    """Check for existing virtual environment"""
+    possible_venvs = [".venv", "venv", ".env", "env"]
+    
+    for venv_name in possible_venvs:
+        if os.path.isdir(venv_name):
+            return venv_name
+    
+    return None
+
+def validate_venv_python_version(venv_path):
+    """Check if venv has Python 3.12+"""
+    try:
+        # Find python executable in venv
+        if os.name == 'nt':  # Windows
+            python_exe = os.path.join(venv_path, "Scripts", "python.exe")
+        else:  # Linux/macOS
+            python_exe = os.path.join(venv_path, "bin", "python")
+        
+        if not os.path.exists(python_exe):
+            return False, "Python executable not found"
+        
+        # Check version
+        result = subprocess.run(
+            [python_exe, "--version"],
+            capture_output=True,
+            text=True
+        )
+        
+        version_str = result.stdout.strip() or result.stderr.strip()
+        # Parse version like "Python 3.12.0"
+        if "Python" in version_str:
+            parts = version_str.split()[-1].split(".")
+            major, minor = int(parts[0]), int(parts[1])
+            if major >= 3 and minor >= 12:
+                return True, f"Python {major}.{minor}"
+            else:
+                return False, f"Python {major}.{minor} (need 3.12+)"
+        
+        return False, "Could not parse version"
+    except Exception as e:
+        return False, str(e)
+
+def manage_venv():
+    """Detect and manage virtual environment"""
+    print("\n🔍 Scanning for existing virtual environment...")
+    
+    existing_venv = check_existing_venv()
+    
+    if existing_venv:
+        print(f"✅ Found existing venv: {existing_venv}")
+        
+        # Validate Python version in venv
+        is_valid, version_info = validate_venv_python_version(existing_venv)
+        
+        if is_valid:
+            print(f"✅ Python version: {version_info} (compatible!)")
+            response = input(f"\nReuse existing venv at '{existing_venv}'? (y/N): ").strip().lower()
+            if response == 'y':
+                print(f"✅ Using existing venv: {existing_venv}")
+                return True
+        else:
+            print(f"⚠️  Python version: {version_info} (incompatible!)")
+        
+        # Ask to recreate
+        response = input("\nRecreate venv with Python 3.12? (Y/n): ").strip().lower()
+        if response != 'n':
+            print(f"🗑️  Removing old venv: {existing_venv}")
+            shutil.rmtree(existing_venv, ignore_errors=True)
+            return create_venv_with_uv()
+        else:
+            print("⚠️  Proceeding with existing venv (may have compatibility issues)")
+            return True
+    else:
+        print("❌ No existing venv found")
+        return create_venv_with_uv()
+
+def check_env_file():
+    """Check for existing .env file"""
+    print("\n🔍 Scanning for .env file...")
+    
+    if os.path.exists(".env"):
+        print("✅ Found existing .env file")
+        response = input("Overwrite existing .env file? (y/N): ").strip().lower()
+        if response == 'y':
+            return setup_env_file()
+        else:
+            print("✅ Using existing .env file")
+            return True
+    else:
+        print("❌ No .env file found")
+        return setup_env_file()
 
 def create_venv_with_uv():
     """Create virtual environment using uv"""
@@ -214,8 +325,12 @@ def main():
     
     print("✅ uv is ready!")
     
-    # Create virtual environment with uv
-    if not create_venv_with_uv():
+    # Manage virtual environment (detect, validate, or create)
+    if not manage_venv():
+        return False
+    
+    # Check/setup .env file
+    if not check_env_file():
         return False
     
     # Install requirements with uv
@@ -224,10 +339,6 @@ def main():
     
     # Install KittenTTS for Python 3.12 voice support
     install_kittentts()  # Optional, but recommended for voice features
-    
-    # Setup environment file
-    if not setup_env_file():
-        return False
     
     print("\n" + "=" * 50)
     print("🎉 Setup complete!")
