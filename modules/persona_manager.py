@@ -494,4 +494,292 @@ Generate an authentic response as the character described in the persona card.""
         if name_reload_success:
             return f"Persona reloaded: {bot_name}"
         else:
-            return f"Persona reloaded: {bot_name} (name reload had issues, check logs)"
+            return f"Persona reloaded: {bot_name} (name reload had issues, check logs)"    
+   
+ # Enhanced response methods for comprehensive personality management
+    
+    def get_error_response(self, error_type="general", **kwargs):
+        """Get error response with fallback hierarchy"""
+        try:
+            # Try specific error type first
+            error_responses = self.persona.get("error_responses", {})
+            if error_type in error_responses:
+                response = error_responses[error_type]
+                return self._format_response(response, **kwargs)
+            
+            # Fall back to general error template
+            response = self.get_response("error", **kwargs)
+            return response
+            
+        except Exception:
+            # Ultimate fallback
+            return "Something went wrong. Please try again."
+    
+    def get_confirmation_response(self, action="general", **kwargs):
+        """Get confirmation response for actions"""
+        try:
+            # Try activity-specific confirmation
+            confirmations = self.persona.get("activity_responses", {}).get("confirmations", {})
+            if action in confirmations:
+                response = confirmations[action]
+                return self._format_response(response, **kwargs)
+            
+            # Fall back to general confirmation template
+            response = self.get_response("confirmation", **kwargs)
+            return response
+            
+        except Exception:
+            # Ultimate fallback
+            return f"Are you sure you want to {action}?"
+    
+    def get_success_response(self, action="general", **kwargs):
+        """Get success response for completed actions"""
+        try:
+            # Try activity-specific success message
+            success_responses = self.persona.get("activity_responses", {}).get("success", {})
+            if action in success_responses:
+                response = success_responses[action]
+                return self._format_response(response, **kwargs)
+            
+            # Fall back to general success template
+            response = self.get_response("success", **kwargs)
+            return response
+            
+        except Exception:
+            # Ultimate fallback
+            return "Operation completed successfully!"
+    
+    def get_utility_response(self, utility_type, result_type="success", **kwargs):
+        """Get utility-specific response (weather, time, dice, etc.)"""
+        try:
+            # Try specific utility response
+            utility_responses = self.persona.get("activity_responses", {}).get("utilities", {})
+            if utility_type in utility_responses:
+                if isinstance(utility_responses[utility_type], dict):
+                    response = utility_responses[utility_type].get(result_type)
+                else:
+                    response = utility_responses[utility_type]
+                
+                if response:
+                    return self._format_response(response, **kwargs)
+            
+            # Fall back to general activity response
+            return self.get_activity_response("utilities", result_type, **kwargs)
+            
+        except Exception:
+            # Ultimate fallback based on result type
+            fallbacks = {
+                "success": f"Here's your {utility_type} result.",
+                "error": f"Couldn't get {utility_type} right now.",
+                "timeout": f"{utility_type.title()} request timed out."
+            }
+            return fallbacks.get(result_type, f"{utility_type.title()} operation completed.")
+    
+    def get_game_response(self, game_type, result_type, **kwargs):
+        """Get game-specific response"""
+        try:
+            # Try specific game response
+            game_responses = self.persona.get("activity_responses", {}).get("games", {})
+            if game_type in game_responses:
+                if isinstance(game_responses[game_type], dict):
+                    response = game_responses[game_type].get(result_type)
+                else:
+                    response = game_responses[game_type]
+                
+                if response:
+                    return self._format_response(response, **kwargs)
+            
+            # Fall back to general game response
+            general_games = self.persona.get("activity_responses", {}).get("games", {})
+            if result_type in general_games:
+                response = general_games[result_type]
+                return self._format_response(response, **kwargs)
+            
+            # Fall back to general activity response
+            return self.get_activity_response("games", result_type, **kwargs)
+            
+        except Exception:
+            # Ultimate fallback
+            fallbacks = {
+                "start": "Let's play!",
+                "win": "You won!",
+                "lose": "You lost!",
+                "tie": "It's a tie!",
+                "hint_low": "Too low!",
+                "hint_high": "Too high!",
+                "no_active_game": "No active game."
+            }
+            return fallbacks.get(result_type, "Game action completed.")
+    
+    def get_command_response(self, command_type, result_type="success", **kwargs):
+        """Get command-specific response"""
+        try:
+            # Try specific command response
+            command_responses = self.persona.get("activity_responses", {}).get("commands", {})
+            if command_type in command_responses:
+                if isinstance(command_responses[command_type], dict):
+                    response = command_responses[command_type].get(result_type)
+                else:
+                    response = command_responses[command_type]
+                
+                if response:
+                    return self._format_response(response, **kwargs)
+            
+            # Fall back to general activity response
+            return self.get_activity_response("commands", result_type, **kwargs)
+            
+        except Exception:
+            # Ultimate fallback
+            return f"Command {command_type} completed."
+    
+    def get_validation_response(self, validation_type, **kwargs):
+        """Get validation error response"""
+        try:
+            # Try specific validation response
+            validation_responses = self.persona.get("response_templates", {}).get("validation", {})
+            if validation_type in validation_responses:
+                response = validation_responses[validation_type]
+                return self._format_response(response, **kwargs)
+            
+            # Fall back to general invalid input response
+            response = self.get_response("invalid_input", **kwargs)
+            return response
+            
+        except Exception:
+            # Ultimate fallback
+            return "Please check your input and try again."
+    
+    def get_permission_response(self, action="general", **kwargs):
+        """Get permission denied response"""
+        try:
+            # Try specific permission response
+            permission_responses = self.persona.get("response_templates", {}).get("permissions", {})
+            if action in permission_responses:
+                response = permission_responses[action]
+                return self._format_response(response, **kwargs)
+            
+            # Fall back to general permission response
+            response = self.get_response("no_permission", **kwargs)
+            return response
+            
+        except Exception:
+            # Ultimate fallback
+            return "You don't have permission for that action."
+    
+    def get_timeout_response(self, operation="operation", **kwargs):
+        """Get timeout response"""
+        try:
+            # Try specific timeout response
+            timeout_responses = self.persona.get("response_templates", {}).get("timeouts", {})
+            if operation in timeout_responses:
+                response = timeout_responses[operation]
+                return self._format_response(response, **kwargs)
+            
+            # Fall back to general timeout response
+            response = self.get_response("timeout", **kwargs)
+            return response
+            
+        except Exception:
+            # Ultimate fallback
+            return f"{operation.title()} timed out. Please try again."
+    
+    def get_api_error_response(self, service="service", **kwargs):
+        """Get API error response"""
+        try:
+            # Try specific API error response
+            api_responses = self.persona.get("error_responses", {}).get("api_errors", {})
+            if service in api_responses:
+                response = api_responses[service]
+                return self._format_response(response, **kwargs)
+            
+            # Fall back to general API error
+            response = self.get_error_response("api_error", **kwargs)
+            return response
+            
+        except Exception:
+            # Ultimate fallback
+            return f"{service.title()} is currently unavailable."
+    
+    def _format_response(self, response, **kwargs):
+        """Internal method to format responses with error handling"""
+        try:
+            # Handle list responses
+            if isinstance(response, list):
+                response = random.choice(response)
+            
+            # Format with provided kwargs
+            if isinstance(response, str):
+                return response.format(**kwargs)
+            else:
+                return str(response)
+                
+        except (KeyError, ValueError, AttributeError):
+            # If formatting fails, return unformatted response
+            if isinstance(response, str):
+                return response
+            else:
+                return str(response)
+    
+    def validate_persona_completeness(self):
+        """Validate persona card completeness and return report"""
+        validation_result = {
+            "valid": True,
+            "warnings": [],
+            "errors": [],
+            "completeness": 0.0,
+            "missing_elements": [],
+            "fallback_usage": {}
+        }
+        
+        # Check required elements
+        required_fields = ["name", "personality"]
+        for field in required_fields:
+            if field not in self.persona:
+                validation_result["errors"].append(f"Missing required field: {field}")
+                validation_result["valid"] = False
+        
+        # Check recommended elements
+        recommended_fields = [
+            "response_templates",
+            "activity_responses", 
+            "relationship_responses",
+            "speech_patterns"
+        ]
+        
+        present_recommended = 0
+        for field in recommended_fields:
+            if field in self.persona and self.persona[field]:
+                present_recommended += 1
+            else:
+                validation_result["missing_elements"].append(field)
+        
+        validation_result["completeness"] = present_recommended / len(recommended_fields)
+        
+        # Check specific response categories
+        response_categories = [
+            "error", "success", "timeout", "invalid_input", 
+            "no_permission", "not_found", "confirmation"
+        ]
+        
+        missing_responses = []
+        response_templates = self.persona.get("response_templates", {})
+        for category in response_categories:
+            if category not in response_templates:
+                missing_responses.append(category)
+        
+        if missing_responses:
+            validation_result["warnings"].append(f"Missing response templates: {', '.join(missing_responses)}")
+        
+        return validation_result
+    
+    def get_fallback_usage_report(self):
+        """Generate report on fallback usage (would need tracking implementation)"""
+        # This would require implementing usage tracking
+        # For now, return a placeholder structure
+        return {
+            "total_responses": 0,
+            "fallback_responses": 0,
+            "fallback_percentage": 0.0,
+            "most_used_fallbacks": [],
+            "missing_response_types": []
+        }

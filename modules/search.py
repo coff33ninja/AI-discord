@@ -152,12 +152,12 @@ class TsundereSearch:
             # Fallback if AI is not available
             logger.info("AI analysis not available, using fallback response")
             print("⚠️ AI analysis not available, using fallback")
-            return f"Here's what I found about **{query}**:\n\n{search_results}"
+            return self.persona_manager.get_utility_response("search", "results_found", query=query, results=search_results)
             
         except Exception as e:
             logger.error(f"AI analysis error: {str(e)}")
             print(f"💥 AI analysis error: {e}")
-            return f"Here's what I found about **{query}**:\n\n{search_results}"
+            return self.persona_manager.get_utility_response("search", "results_found", query=query, results=search_results)
     
     async def search_duckduckgo(self, query, max_results=5, use_ai_analysis=True):
         """
@@ -176,7 +176,7 @@ class TsundereSearch:
         query = self._validate_query(query)
         if not query:
             logger.warning("Invalid or empty search query")
-            return self._get_error_response(None, "Invalid or empty search query")
+            return self.persona_manager.get_validation_response("search_query")
         
         try:
             logger.info(f"Starting DuckDuckGo search: query='{query}', use_ai_analysis={use_ai_analysis}")
@@ -322,7 +322,7 @@ class TsundereSearch:
             results_text = "\n\n".join(results)
             response = self._get_persona_response('search', 'related_topics',
                 {'query': query, 'results': results_text})
-            return response if response else f"**{query}**:\n\n{results_text}"
+            return response if response else self.persona_manager.get_utility_response("search", "results", query=query, results=results_text)
         
         return self._get_no_results_response(query)
     
@@ -338,7 +338,7 @@ class TsundereSearch:
                 query=query, definition=definition, source=source
             )
         else:
-            return f"**{query}**:\n\n{definition}\n\n*Source: {source}*"
+            return self.persona_manager.get_utility_response("search", "definition", query=query, definition=definition, source=source)
     
     def _get_no_results_response(self, query):
         """Get response when no results found"""
@@ -347,7 +347,7 @@ class TsundereSearch:
         if no_results_responses:
             return random.choice(no_results_responses).format(query=query)
         else:
-            return f"No results found for **{query}**"
+            return self.persona_manager.get_utility_response("search", "no_results", query=query)
     
     def _get_error_response(self, query, error=None):
         """Get response when search fails"""
@@ -356,7 +356,7 @@ class TsundereSearch:
         if error_responses:
             return random.choice(error_responses)
         else:
-            return "Search error occurred"
+            return self.persona_manager.get_error_response("search_error")
     
     def _get_timeout_response(self, query):
         """Get response when search times out"""
@@ -365,7 +365,7 @@ class TsundereSearch:
         if timeout_responses:
             return random.choice(timeout_responses).format(query=query)
         else:
-            return f"Search timed out for **{query}**"
+            return self.persona_manager.get_timeout_response("search", query=query)
     
     async def web_search(self, query, max_results=3):
         """

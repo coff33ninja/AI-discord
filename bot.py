@@ -7,7 +7,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # Import our tsundere modules
-from modules.personality import TsunderePersonality
+# Removed: from modules.personality import TsunderePersonality - now using persona_manager
 from modules.utilities import TsundereUtilities
 from modules.games import TsundereGames
 from modules.social import TsundereSocial
@@ -41,7 +41,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Initialize persona and modules
 persona_manager = PersonaManager()
-personality = TsunderePersonality()
+# Removed: personality = TsunderePersonality() - now using persona_manager for all responses
 utilities = None  # Will be initialized after model is ready
 games = TsundereGames()
 social = TsundereSocial()
@@ -276,7 +276,7 @@ async def ask_gemini(ctx, *, question):
             if response_text is None:
                 # All API attempts failed
                 logger.error("All API attempts failed for AI command")
-                timeout_response = personality.get_error_response("AI timeout")
+                timeout_response = persona_manager.get_timeout_response("AI")
                 await ctx.send(timeout_response)
                 return
             
@@ -331,7 +331,7 @@ async def ask_gemini(ctx, *, question):
         except Exception:
             pass
         
-        await ctx.send(personality.get_error_response(e))
+        await ctx.send(persona_manager.get_error_response("ai_command_error", error=str(e)))
 
 async def extract_search_terms(question):
     """Extract relevant search terms from a question"""
@@ -354,7 +354,7 @@ async def extract_search_terms(question):
 
 def create_memory_enhanced_prompt(question, username, conversation_history):
     """Create a prompt that includes conversation history for memory"""
-    base_prompt = personality.create_ai_prompt(question)
+    base_prompt = persona_manager.create_ai_prompt(question)
     
     if not conversation_history:
         return base_prompt
@@ -440,7 +440,7 @@ async def help_command(ctx):
             },
             {
                 'name': "**Admin Commands** (admin only)",
-                'value': "`!reload_persona` - Reload personality config\n`!api_status` - Check API key status\n`!ai_analytics` - View AI usage stats\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
+                'value': "`!reload_persona` - Reload personality config\n`!persona_health` - Check persona configuration health\n`!persona_report` - Generate detailed persona report\n`!api_status` - Check API key status\n`!ai_analytics` - View AI usage stats\n`!shutdown` (or `!kill`, `!stop`) - Shutdown bot\n`!restart` (or `!reboot`) - Restart bot",
                 'inline': False
             }
         ],
@@ -531,7 +531,7 @@ async def compliment_ai(ctx):
     else:
         # Fallback to persona card response
         logger.warning("AI response failed, using fallback for compliment")
-        fallback = personality.get_error_response("AI unavailable")
+        fallback = persona_manager.get_error_response("ai_unavailable")
         await ctx.send(fallback)
 
 # Social Commands
@@ -555,7 +555,7 @@ async def check_mood(ctx):
     else:
         # Fallback to persona card response
         logger.warning("AI response failed, using fallback for mood command")
-        fallback = personality.get_error_response("AI unavailable")
+        fallback = persona_manager.get_error_response("ai_unavailable")
         await ctx.send(fallback)
 
 @bot.command(name='relationship')
@@ -585,7 +585,7 @@ async def check_relationship(ctx):
         try:
             fallback = persona_manager.get_relationship_response(relationship_level, "greeting")
         except Exception:
-            fallback = "Hello! How can I help you today?"
+            fallback = persona_manager.get_response("greeting")
         await ctx.send(f"{fallback} (Interactions: {interactions}, Level: {relationship_level})")
 
 # Utility Commands
@@ -669,7 +669,7 @@ async def set_reminder(ctx, *, reminder_input):
         if len(parts) != 2:
             parts = reminder_input.split(" ", 3)
             if len(parts) < 4:
-                await ctx.send("❌ Please use format: `!remind in 5 minutes to take a break` or `!remind at 3pm to call mom`")
+                await ctx.send(persona_manager.get_validation_response("reminder_format"))
                 return
             
             time_part = " ".join(parts[:3])  # "in 5 minutes" or "at 3pm"
@@ -681,7 +681,7 @@ async def set_reminder(ctx, *, reminder_input):
         # Parse the time
         remind_time = time_utils.parse_time_input(time_part)
         if not remind_time:
-            await ctx.send("❌ I couldn't understand that time format. Try: `in 5 minutes`, `at 3pm`, `tomorrow at 9am`")
+            await ctx.send(persona_manager.get_validation_response("time_format"))
             return
         
         # Set the reminder
@@ -706,7 +706,7 @@ async def set_reminder(ctx, *, reminder_input):
         
     except Exception as e:
         logger.error(f"Error in remind command: {e}")
-        await ctx.send(f"❌ Error setting reminder: {e}")
+        await ctx.send(persona_manager.get_error_response("reminder_error", error=str(e)))
 
 @bot.command(name='reminders', aliases=['myreminders', 'listreminders'])
 async def list_reminders(ctx):
@@ -752,7 +752,7 @@ async def list_reminders(ctx):
         
     except Exception as e:
         logger.error(f"Error in reminders command: {e}")
-        await ctx.send(f"❌ Error getting reminders: {e}")
+        await ctx.send(persona_manager.get_error_response("reminders_error", error=str(e)))
 
 @bot.command(name='cancelreminder', aliases=['deletereminder', 'removereminder'])
 async def cancel_reminder(ctx, reminder_id: int):
@@ -766,18 +766,18 @@ async def cancel_reminder(ctx, reminder_id: int):
             try:
                 msg = persona_manager.get_activity_response("reminders", "reminder_cancelled", reminder_id=reminder_id)
             except Exception:
-                msg = f"✅ Reminder {reminder_id} has been cancelled."
+                msg = persona_manager.get_success_response("reminder_cancelled", reminder_id=reminder_id)
             await ctx.send(msg)
         else:
             try:
                 msg = persona_manager.get_activity_response("reminders", "reminder_not_found", reminder_id=reminder_id)
             except Exception:
-                msg = f"❌ Reminder {reminder_id} not found."
+                msg = persona_manager.get_error_response("reminder_not_found", reminder_id=reminder_id)
             await ctx.send(msg)
         
     except Exception as e:
         logger.error(f"Error in cancel reminder command: {e}")
-        await ctx.send(f"❌ Error canceling reminder: {e}")
+        await ctx.send(persona_manager.get_error_response("cancel_reminder_error", error=str(e)))
 
 @bot.command(name='subscribe')
 async def subscribe_feature(ctx, feature_type: str):
@@ -788,7 +788,7 @@ async def subscribe_feature(ctx, feature_type: str):
         valid_features = ['daily_fact', 'daily_joke', 'weekly_stats', 'mood_check']
         
         if feature_type not in valid_features:
-            await ctx.send(f"❌ Invalid feature! Available: {', '.join(valid_features)}")
+            await ctx.send(persona_manager.get_validation_response("invalid_feature", features=', '.join(valid_features)))
             return
         
         success = await time_utils.subscribe_to_feature(
@@ -809,14 +809,14 @@ async def subscribe_feature(ctx, feature_type: str):
             try:
                 msg = persona_manager.get_activity_response("subscriptions", "subscribed", feature_name=feature_name)
             except Exception:
-                msg = f"✅ You're now subscribed to {feature_name}."
+                msg = persona_manager.get_success_response("subscription_added", feature_name=feature_name)
             await ctx.send(msg)
         else:
-            await ctx.send("❌ Something went wrong with the subscription!")
+            await ctx.send(persona_manager.get_error_response("subscription_error"))
         
     except Exception as e:
         logger.error(f"Error in subscribe command: {e}")
-        await ctx.send(f"❌ Error subscribing: {e}")
+        await ctx.send(persona_manager.get_error_response("subscribe_error", error=str(e)))
 
 @bot.command(name='unsubscribe')
 async def unsubscribe_feature(ctx, feature_type: str):
@@ -834,18 +834,18 @@ async def unsubscribe_feature(ctx, feature_type: str):
             try:
                 msg = persona_manager.get_activity_response("subscriptions", "unsubscribed", feature_name=feature_type)
             except Exception:
-                msg = f"✅ You're now unsubscribed from {feature_type}."
+                msg = persona_manager.get_success_response("subscription_removed", feature_name=feature_type)
             await ctx.send(msg)
         else:
             try:
                 msg = persona_manager.get_activity_response("subscriptions", "not_subscribed", feature_name=feature_type)
             except Exception:
-                msg = f"❌ You were not subscribed to {feature_type}."
+                msg = persona_manager.get_error_response("not_subscribed", feature_name=feature_type)
             await ctx.send(msg)
         
     except Exception as e:
         logger.error(f"Error in unsubscribe command: {e}")
-        await ctx.send(f"❌ Error unsubscribing: {e}")
+        await ctx.send(persona_manager.get_error_response("unsubscribe_error", error=str(e)))
 
 @bot.command(name='subscriptions', aliases=['mysubscriptions'])
 async def list_subscriptions(ctx):
@@ -880,7 +880,7 @@ async def list_subscriptions(ctx):
         
     except Exception as e:
         logger.error(f"Error in subscriptions command: {e}")
-        await ctx.send(f"❌ Error getting subscriptions: {e}")
+        await ctx.send(persona_manager.get_error_response("subscriptions_error", error=str(e)))
 
 # Search Commands
 @bot.command(name='search', aliases=['google', 'find'])
@@ -920,7 +920,7 @@ async def search_web(ctx, *, query):
     except Exception as e:
         logger.error(f"Search command error: {str(e)}")
         print(f"💥 Search command error: {str(e)}")
-        await ctx.send(personality.get_error_response(e))
+        await ctx.send(persona_manager.get_error_response("search_error", error=str(e)))
 
 @bot.command(name='websearch', aliases=['web'])
 async def web_search_command(ctx, *, query):
@@ -959,7 +959,7 @@ async def web_search_command(ctx, *, query):
     except Exception as e:
         logger.error(f"Web search command error: {str(e)}")
         print(f"💥 Web search command error: {str(e)}")
-        await ctx.send(personality.get_error_response(e))
+        await ctx.send(persona_manager.get_error_response("web_search_error", error=str(e)))
 
 # Game Commands
 @bot.command(name='game')
@@ -969,7 +969,7 @@ async def start_game(ctx, game_type=None, max_number: int = 100):
     
     if game_type is None:
         logger.warning(f"Game command missing arguments from user {ctx.author.id}")
-        await ctx.send(personality.get_missing_args_response() + " Try `!game guess` for number guessing!")
+        await ctx.send(persona_manager.get_response("missing_args") + " Try `!game guess` for number guessing!")
         return
     
     if game_type.lower() == 'guess':
@@ -977,7 +977,7 @@ async def start_game(ctx, game_type=None, max_number: int = 100):
         await ctx.send(response)
     else:
         logger.warning(f"Unknown game type requested by user {ctx.author.id}: {game_type}")
-        await ctx.send(personality.get_missing_args_response() + " I only know 'guess' games right now! Try `!game guess`!")
+        await ctx.send(persona_manager.get_response("missing_args") + " I only know 'guess' games right now! Try `!game guess`!")
 
 @bot.command(name='guess')
 async def make_guess(ctx, number: int):
@@ -997,7 +997,7 @@ async def rock_paper_scissors(ctx, choice=None):
     
     if choice is None:
         logger.warning(f"RPS command missing arguments from user {ctx.author.id}")
-        await ctx.send(personality.get_missing_args_response() + " Pick rock, paper, or scissors! Try `!rps rock` or just `!rock`!")
+        await ctx.send(persona_manager.get_response("missing_args") + " Pick rock, paper, or scissors! Try `!rps rock` or just `!rock`!")
         return
     
     response = await games.rock_paper_scissors(choice)
@@ -1085,17 +1085,31 @@ async def reload_persona(ctx):
     if ctx.author.guild_permissions.administrator:
         logger.info(f"Admin permission verified for user {ctx.author.id}")
         
-        # Store old name for comparison
+        # Store old configuration for comparison and rollback
         old_name = persona_manager.get_name()
+        old_persona_backup = persona_manager.persona.copy()
+        
+        # Validate persona card before reloading
+        try:
+            validation_result = persona_manager.validate_persona_completeness()
+            logger.info(f"Persona validation: Valid={validation_result['valid']}, Completeness={validation_result['completeness']:.1%}")
+        except Exception as e:
+            logger.warning(f"Persona validation failed: {e}")
+            validation_result = {"valid": False, "errors": [str(e)], "warnings": [], "completeness": 0.0}
         
         # Reload persona (this also reloads the bot name service)
+        reload_success = False
+        changes_made = []
+        
         try:
             result = persona_manager.reload_persona()
             logger.info(f"Persona reloaded: {result}")
+            reload_success = True
             
-            # Check if name changed and update Discord presence
+            # Check what changed
             new_name = persona_manager.get_name()
             if old_name != new_name:
+                changes_made.append(f"Name: '{old_name}' → '{new_name}'")
                 logger.info(f"Bot name changed from '{old_name}' to '{new_name}', updating presence")
                 try:
                     # Update bot status with new name
@@ -1107,50 +1121,114 @@ async def reload_persona(ctx):
                         status_text = status_template
                     await bot.change_presence(activity=discord.Game(name=status_text))
                     logger.info(f"Discord presence updated with new name: {new_name}")
+                    changes_made.append("Discord presence updated")
                 except Exception as e:
                     logger.error(f"Failed to update Discord presence: {e}")
-                    # Don't fail the whole reload if presence update fails
+                    changes_made.append(f"Discord presence update failed: {str(e)}")
+            
+            # Check for other personality changes
+            new_personality = persona_manager.persona.get("personality", "unknown")
+            old_personality = old_persona_backup.get("personality", "unknown")
+            if new_personality != old_personality:
+                changes_made.append(f"Personality: '{old_personality}' → '{new_personality}'")
+            
+            # Check response template changes
+            old_templates = len(old_persona_backup.get("response_templates", {}))
+            new_templates = len(persona_manager.persona.get("response_templates", {}))
+            if old_templates != new_templates:
+                changes_made.append(f"Response templates: {old_templates} → {new_templates}")
+            
+            # Validate new configuration
+            new_validation = persona_manager.validate_persona_completeness()
+            if new_validation["completeness"] != validation_result["completeness"]:
+                changes_made.append(f"Completeness: {validation_result['completeness']:.1%} → {new_validation['completeness']:.1%}")
+            
+            # Create detailed result message
+            if changes_made:
+                result = f"Persona reloaded successfully! Changes: {', '.join(changes_made)}"
+            else:
+                result = "Persona reloaded (no changes detected)"
+            
+            # Add validation warnings if any
+            if new_validation.get("warnings"):
+                result += f" | Warnings: {len(new_validation['warnings'])}"
             
         except Exception as e:
             logger.error(f"Failed to reload persona: {e}")
-            # Maintain previous functionality even if reload fails
-            result = f"Reload failed: {str(e)}, using previous configuration"
+            # Rollback to previous configuration
+            try:
+                persona_manager.persona = old_persona_backup
+                persona_manager.bot_name_service.reload_bot_name()
+                logger.info("Rolled back to previous persona configuration")
+                result = f"Reload failed: {str(e)} | Rolled back to previous configuration"
+            except Exception as rollback_error:
+                logger.error(f"Rollback failed: {rollback_error}")
+                result = f"Reload failed: {str(e)} | Rollback also failed: {str(rollback_error)}"
+            
             new_name = old_name  # Keep the old name if reload failed
+            reload_success = False
         
         # Get user relationship for personalized response
         user_data = social.get_user_relationship(ctx.author.id)
         relationship_level = user_data['relationship_level']
         
-        # Generate AI response for reload command
+        # Generate comprehensive response with validation details
         try:
+            # Create detailed prompt with validation info
+            validation_info = ""
+            if reload_success:
+                current_validation = persona_manager.validate_persona_completeness()
+                validation_info = f" | Validation: {current_validation['completeness']:.1%} complete"
+                if current_validation.get("warnings"):
+                    validation_info += f", {len(current_validation['warnings'])} warnings"
+                if current_validation.get("errors"):
+                    validation_info += f", {len(current_validation['errors'])} errors"
+            
             prompt = persona_manager.create_ai_prompt(
-                f"!reload_persona command (result: {result})", ctx.author.display_name, relationship_level
+                f"!reload_persona command (result: {result}{validation_info})", 
+                ctx.author.display_name, relationship_level
             )
             response = await api_manager.generate_content(prompt)
             
             if response:
                 await ctx.send(response)
+                
+                # Send additional validation details if there are warnings or errors
+                if reload_success:
+                    current_validation = persona_manager.validate_persona_completeness()
+                    if current_validation.get("warnings") or current_validation.get("errors"):
+                        details = []
+                        if current_validation.get("errors"):
+                            details.append(f"❌ **Errors:** {', '.join(current_validation['errors'])}")
+                        if current_validation.get("warnings"):
+                            details.append(f"⚠️ **Warnings:** {', '.join(current_validation['warnings'])}")
+                        if current_validation.get("missing_elements"):
+                            details.append(f"📋 **Missing:** {', '.join(current_validation['missing_elements'])}")
+                        
+                        if details:
+                            await ctx.send(f"**Persona Validation Details:**\n" + "\n".join(details))
             else:
                 # Fallback to persona card response
                 logger.warning("AI response failed for reload_persona, using fallback")
                 try:
-                    if "failed" in result.lower():
-                        fallback = f"❌ {result}"
+                    if not reload_success:
+                        fallback = persona_manager.get_error_response("reload_failed", result=result)
                     else:
                         fallback = persona_manager.get_activity_response("admin", "reload_success", result=result)
                 except Exception:
-                    if "failed" in result.lower():
-                        fallback = f"❌ {result}"
+                    if not reload_success:
+                        fallback = persona_manager.get_error_response("reload_failed", result=result)
                     else:
-                        fallback = f"✅ Configuration reloaded successfully: {result}"
+                        fallback = persona_manager.get_success_response("configuration_reloaded", result=result)
                 await ctx.send(fallback)
+                
         except Exception as e:
             logger.error(f"Error generating reload response: {e}")
             # Ultimate fallback
-            if "failed" in result.lower():
-                await ctx.send(f"❌ {result}")
+            if not reload_success:
+                await ctx.send(persona_manager.get_error_response("reload_failed", result=result))
             else:
-                await ctx.send(f"✅ Configuration reloaded: {result}")
+                await ctx.send(persona_manager.get_success_response("configuration_reloaded", result=result))
     else:
         logger.warning(f"Non-admin user {ctx.author.id} attempted reload_persona command")
         # Generate AI response for no permission
@@ -1328,6 +1406,102 @@ async def restart_bot(ctx):
                 fallback = "You don't have permission to use that command."
             await ctx.send(fallback)
 
+@bot.command(name='persona_health', aliases=['persona_status', 'personality_check'])
+async def persona_health(ctx):
+    """Check persona card health and completeness (admin only)"""
+    logger.info(f"Persona health command called by user {ctx.author.id}")
+    
+    if ctx.author.guild_permissions.administrator:
+        logger.info(f"Admin permission verified for user {ctx.author.id}")
+        
+        try:
+            # Get comprehensive validation report
+            validation = persona_manager.validate_persona_completeness()
+            
+            # Create detailed health report
+            embed = discord.Embed(
+                title=f"🔍 {persona_manager.get_name()} - Persona Health Report",
+                color=0x00ff00 if validation["valid"] else 0xff0000
+            )
+            
+            # Basic info
+            embed.add_field(
+                name="📊 Overall Status",
+                value=f"**Valid:** {'✅ Yes' if validation['valid'] else '❌ No'}\n"
+                      f"**Completeness:** {validation['completeness']:.1%}\n"
+                      f"**Name:** {persona_manager.get_name()}\n"
+                      f"**Personality:** {persona_manager.persona.get('personality', 'Unknown')}",
+                inline=False
+            )
+            
+            # Configuration details
+            config_details = []
+            response_templates = len(persona_manager.persona.get("response_templates", {}))
+            activity_responses = len(persona_manager.persona.get("activity_responses", {}))
+            relationship_responses = len(persona_manager.persona.get("relationship_responses", {}))
+            speech_patterns = len(persona_manager.persona.get("speech_patterns", {}))
+            
+            config_details.append(f"Response Templates: {response_templates}")
+            config_details.append(f"Activity Responses: {activity_responses}")
+            config_details.append(f"Relationship Responses: {relationship_responses}")
+            config_details.append(f"Speech Patterns: {speech_patterns}")
+            
+            embed.add_field(
+                name="⚙️ Configuration",
+                value="\n".join(config_details),
+                inline=True
+            )
+            
+            # Issues and warnings
+            issues = []
+            if validation.get("errors"):
+                issues.extend([f"❌ {error}" for error in validation["errors"]])
+            if validation.get("warnings"):
+                issues.extend([f"⚠️ {warning}" for warning in validation["warnings"]])
+            
+            if issues:
+                embed.add_field(
+                    name="🚨 Issues Found",
+                    value="\n".join(issues[:5]) + (f"\n... and {len(issues)-5} more" if len(issues) > 5 else ""),
+                    inline=False
+                )
+            
+            # Missing elements
+            if validation.get("missing_elements"):
+                missing = validation["missing_elements"]
+                embed.add_field(
+                    name="📋 Missing Elements",
+                    value=", ".join(missing[:10]) + ("..." if len(missing) > 10 else ""),
+                    inline=False
+                )
+            
+            # Recommendations
+            recommendations = []
+            if validation["completeness"] < 0.5:
+                recommendations.append("Consider adding more response templates for better personality")
+            if not persona_manager.persona.get("speech_patterns"):
+                recommendations.append("Add speech patterns for more natural responses")
+            if validation.get("errors"):
+                recommendations.append("Fix configuration errors for optimal performance")
+            
+            if recommendations:
+                embed.add_field(
+                    name="💡 Recommendations",
+                    value="\n".join(recommendations),
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Persona file: {persona_manager.bot_name_service.get_persona_card_path()}")
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error in persona health check: {e}")
+            await ctx.send(persona_manager.get_error_response("health_check_error", error=str(e)))
+    else:
+        logger.warning(f"Non-admin user {ctx.author.id} attempted persona_health command")
+        await ctx.send(persona_manager.get_permission_response("admin_command"))
+
 @bot.command(name='api_status')
 async def api_status(ctx):
     """Check API key status (admin only)"""
@@ -1430,6 +1604,94 @@ async def memory_settings(ctx, memory_length: int = None):
         logger.error(f"Error in memory settings: {e}")
         await ctx.send(f"❌ Error updating memory settings: {e}")
 
+@bot.command(name='persona_report', aliases=['personality_report'])
+async def persona_report(ctx):
+    """Generate detailed persona usage and fallback report (admin only)"""
+    logger.info(f"Persona report command called by user {ctx.author.id}")
+    
+    if ctx.author.guild_permissions.administrator:
+        logger.info(f"Admin permission verified for user {ctx.author.id}")
+        
+        try:
+            # Get validation report
+            validation = persona_manager.validate_persona_completeness()
+            
+            # Create comprehensive report
+            report_lines = []
+            report_lines.append(f"# {persona_manager.get_name()} - Persona Report")
+            report_lines.append(f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            report_lines.append("")
+            
+            # Validation summary
+            report_lines.append("## Validation Summary")
+            report_lines.append(f"- **Status:** {'✅ Valid' if validation['valid'] else '❌ Invalid'}")
+            report_lines.append(f"- **Completeness:** {validation['completeness']:.1%}")
+            report_lines.append(f"- **Errors:** {len(validation.get('errors', []))}")
+            report_lines.append(f"- **Warnings:** {len(validation.get('warnings', []))}")
+            report_lines.append("")
+            
+            # Configuration details
+            report_lines.append("## Configuration Details")
+            persona_data = persona_manager.persona
+            report_lines.append(f"- **Name:** {persona_data.get('name', 'Not set')}")
+            report_lines.append(f"- **Personality:** {persona_data.get('personality', 'Not set')}")
+            report_lines.append(f"- **Description:** {persona_data.get('description', 'Not set')[:100]}...")
+            report_lines.append(f"- **Response Templates:** {len(persona_data.get('response_templates', {}))}")
+            report_lines.append(f"- **Activity Responses:** {len(persona_data.get('activity_responses', {}))}")
+            report_lines.append(f"- **Relationship Responses:** {len(persona_data.get('relationship_responses', {}))}")
+            report_lines.append(f"- **Speech Patterns:** {len(persona_data.get('speech_patterns', {}))}")
+            report_lines.append("")
+            
+            # Issues
+            if validation.get("errors") or validation.get("warnings"):
+                report_lines.append("## Issues")
+                for error in validation.get("errors", []):
+                    report_lines.append(f"- ❌ **Error:** {error}")
+                for warning in validation.get("warnings", []):
+                    report_lines.append(f"- ⚠️ **Warning:** {warning}")
+                report_lines.append("")
+            
+            # Missing elements
+            if validation.get("missing_elements"):
+                report_lines.append("## Missing Elements")
+                for element in validation["missing_elements"]:
+                    report_lines.append(f"- 📋 {element}")
+                report_lines.append("")
+            
+            # Recommendations
+            recommendations = []
+            if validation["completeness"] < 0.8:
+                recommendations.append("Consider expanding persona configuration for richer personality")
+            if not persona_data.get("speech_patterns"):
+                recommendations.append("Add speech patterns for more natural conversation flow")
+            if len(persona_data.get("response_templates", {})) < 5:
+                recommendations.append("Add more response templates for varied reactions")
+            
+            if recommendations:
+                report_lines.append("## Recommendations")
+                for rec in recommendations:
+                    report_lines.append(f"- 💡 {rec}")
+                report_lines.append("")
+            
+            # Create the report text
+            report_text = "\n".join(report_lines)
+            
+            # Send as file if too long, otherwise as message
+            if len(report_text) > 1900:
+                import io
+                report_file = io.StringIO(report_text)
+                file = discord.File(report_file, filename=f"{persona_manager.get_name()}_persona_report.md")
+                await ctx.send("📊 **Persona Report Generated**", file=file)
+            else:
+                await ctx.send(f"```markdown\n{report_text}\n```")
+                
+        except Exception as e:
+            logger.error(f"Error generating persona report: {e}")
+            await ctx.send(persona_manager.get_error_response("report_generation_error", error=str(e)))
+    else:
+        logger.warning(f"Non-admin user {ctx.author.id} attempted persona_report command")
+        await ctx.send(persona_manager.get_permission_response("admin_command"))
+
 @bot.command(name='ai_analytics')
 async def ai_analytics(ctx, days: int = 7):
     """View AI usage analytics (admin only)"""
@@ -1490,7 +1752,7 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         # Handle missing arguments with persona response
         logger.warning(f"Missing required argument: {error.param.name}")
-        await ctx.send(personality.get_missing_args_response() + f" You're missing: {error.param.name}")
+        await ctx.send(persona_manager.get_response("missing_args") + f" You're missing: {error.param.name}")
     elif isinstance(error, commands.CommandNotFound):
         # Ignore command not found errors (don't spam chat)
         logger.debug("Command not found error ignored")
@@ -1504,7 +1766,7 @@ async def on_command_error(ctx, error):
                 permissions_config = persona_manager.persona.get("activity_responses", {}).get("permissions", {})
                 message = permissions_config.get("no_send_permission", "I don't have permission to send messages!")
             except Exception:
-                message = "I don't have permission to send messages!"
+                message = persona_manager.get_permission_response("send_messages")
             await ctx.author.send(message)
         except (discord.Forbidden, discord.HTTPException):
             logger.warning(f"Could not DM user {ctx.author.id} about permission error")
@@ -1513,7 +1775,7 @@ async def on_command_error(ctx, error):
         # For other errors, send a generic tsundere error message
         logger.error(f"Unhandled command error: {type(error).__name__}: {str(error)}")
         try:
-            await ctx.send(personality.get_error_response(error))
+            await ctx.send(persona_manager.get_error_response("command_error", error=str(error)))
         except (discord.Forbidden, discord.HTTPException):
             logger.error(f"Could not send error response to user {ctx.author.id}")
             pass  # If we can't send the error message, fail silently

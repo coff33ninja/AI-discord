@@ -146,11 +146,19 @@ class TimeBasedUtilities:
                     
                     # Fallback reminder intros if none found
                     if not reminder_intros:
-                        reminder_intros = [
-                            "Hey {user_mention}! Here's your reminder:",
-                            "{user_mention}, you asked me to remind you about this:",
-                            "Reminder for {user_mention}:"
-                        ]
+                        # Use persona manager for fallback reminder intros
+                        from .persona_manager import PersonaManager
+                        pm = PersonaManager()
+                        try:
+                            reminder_intro = pm.get_activity_response("reminders", "reminder_ping", user_mention=user_mention)
+                            reminder_intros = [reminder_intro]
+                        except Exception:
+                            # Ultimate fallback
+                            reminder_intros = [
+                                "Hey {user_mention}! Here's your reminder:",
+                                "{user_mention}, you asked me to remind you about this:",
+                                "Reminder for {user_mention}:"
+                            ]
                     
                     import random
                     intro = random.choice(reminder_intros).format(user_mention=user_mention)

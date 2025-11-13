@@ -59,7 +59,7 @@ class TsundereUtilities:
             
             if not isinstance(location, str) or not location.strip():
                 logger.warning(f"Invalid weather location: {location}")
-                return "Please provide a valid location."
+                return self.persona_manager.get_validation_response("location")
             
             logger.info(f"Fetching weather for location: {location}")
             params = {
@@ -97,15 +97,15 @@ class TsundereUtilities:
                 return persona_msg or f"Weather in {location}: {weather_info}"
             else:
                 logger.warning(f"Weather API error for {location}: {response.status_code}")
-                return f"Could not find weather for {location}."
+                return self.persona_manager.get_utility_response("weather", "not_found", location=location)
                 
         except requests.exceptions.Timeout:
             logger.error(f"Weather API timeout for location: {location}")
-            return "Weather API request timed out."
+            return self.persona_manager.get_timeout_response("weather API")
         except requests.exceptions.RequestException as e:
             logger.error(f"Weather API error: {e}")
             print(f"⚠️ Weather API error: {e}")
-            return "I couldn't get the weather info right now..."
+            return self.persona_manager.get_api_error_response("weather")
     
     async def roll_dice(self, sides=DEFAULT_DICE_SIDES):
         """Roll dice with persona-driven attitude"""
@@ -113,7 +113,7 @@ class TsundereUtilities:
             # Validate sides parameter (2-1000 range)
             if not isinstance(sides, int) or sides < 2 or sides > 1000:
                 logger.warning(f"Invalid dice sides: {sides}")
-                return "Please specify a valid number of sides (2-1000)."
+                return self.persona_manager.get_validation_response("dice_sides")
             
             result = random.randint(1, sides)
             logger.info(f"Dice rolled: {result} out of {sides}")
@@ -121,7 +121,7 @@ class TsundereUtilities:
             return persona_msg or f"You rolled a {result}!"
         except (TypeError, ValueError) as e:
             logger.error(f"Dice roll error: {e}")
-            return "Invalid dice parameters."
+            return self.persona_manager.get_validation_response("dice_parameters")
     
     async def get_time(self):
         """Get current time with persona flair"""
@@ -134,7 +134,7 @@ class TsundereUtilities:
         except Exception as e:
             logger.error(f"Error getting time: {e}")
             print(f"⚠️ Error getting time: {e}")
-            return "I couldn't get the time right now..."
+            return self.persona_manager.get_utility_response("time", "error")
     
     async def flip_coin(self):
         """Flip a coin with persona attitude"""
@@ -146,24 +146,24 @@ class TsundereUtilities:
         except Exception as e:
             logger.error(f"Error flipping coin: {e}")
             print(f"⚠️ Error flipping coin: {e}")
-            return "I couldn't flip the coin right now..."
+            return self.persona_manager.get_utility_response("coin", "error")
     
     async def calculate(self, expression):
         """Safe calculator with persona-driven responses"""
         try:
             if not isinstance(expression, str):
                 logger.warning("Non-string calculation expression received")
-                return "Please provide a valid math expression."
+                return self.persona_manager.get_validation_response("math_expression")
             
             if len(expression) > 200:
                 logger.warning(f"Expression too long: {len(expression)} characters")
-                return "Expression is too long. Keep it under 200 characters."
+                return self.persona_manager.get_validation_response("expression_length")
             
             # Simple safe evaluation for basic math
             allowed_chars = set('0123456789+-*/.() ')
             if not all(c in allowed_chars for c in expression):
                 logger.warning(f"Invalid characters in expression: {expression}")
-                return "Invalid characters in expression. Only math operators allowed."
+                return self.persona_manager.get_validation_response("invalid_characters")
             
             result = eval(expression)
             logger.info(f"Calculation successful: {expression} = {result}")
@@ -171,14 +171,14 @@ class TsundereUtilities:
             return persona_msg or f"{expression} = {result}"
         except ZeroDivisionError:
             logger.warning("Division by zero attempted")
-            return "Cannot divide by zero!"
+            return self.persona_manager.get_validation_response("division_by_zero")
         except (SyntaxError, ValueError) as e:
             logger.warning(f"Invalid expression: {e}")
-            return f"Invalid expression: {str(e)}"
+            return self.persona_manager.get_validation_response("syntax_error", error=str(e))
         except Exception as e:
             logger.error(f"Calculation error: {e}")
             print(f"⚠️ Calculation error: {e}")
-            return "I couldn't calculate that..."
+            return self.persona_manager.get_utility_response("calculation", "error")
     
     async def get_random_fact(self, user_id=None):
         """Get a random fact using an API with memory awareness"""
@@ -230,15 +230,15 @@ class TsundereUtilities:
                 return persona_msg or f"{interest_context}Here's a fact: {fact}"
             else:
                 logger.warning(f"Fact API error: {response.status_code}")
-                return "Couldn't fetch a fact right now."
+                return self.persona_manager.get_api_error_response("facts")
                 
         except requests.exceptions.Timeout:
             logger.warning("Fact API request timed out")
-            return "Fact API request timed out."
+            return self.persona_manager.get_timeout_response("facts API")
         except requests.exceptions.RequestException as e:
             logger.error(f"Fact API error: {e}")
             print(f"⚠️ Fact API error: {e}")
-            return "Can't get facts right now!"
+            return self.persona_manager.get_api_error_response("facts")
     
     async def get_joke(self, user_id=None):
         """Get a random joke using an API with memory awareness"""
@@ -286,15 +286,15 @@ class TsundereUtilities:
                 return persona_msg or f"{joke_context}Here's a joke:\n{setup}\n{punchline}"
             else:
                 logger.warning(f"Joke API error: {response.status_code}")
-                return "Couldn't fetch a joke right now."
+                return self.persona_manager.get_api_error_response("jokes")
                 
         except requests.exceptions.Timeout:
             logger.warning("Joke API request timed out")
-            return "Joke API request timed out."
+            return self.persona_manager.get_timeout_response("jokes API")
         except requests.exceptions.RequestException as e:
             logger.error(f"Joke API error: {e}")
             print(f"⚠️ Joke API error: {e}")
-            return "Can't get jokes right now!"
+            return self.persona_manager.get_api_error_response("jokes")
     
     async def get_cat_fact(self):
         """Get a random cat fact"""
@@ -310,15 +310,15 @@ class TsundereUtilities:
                 return persona_msg or f"Here's a cat fact: {fact}"
             else:
                 logger.warning(f"Cat fact API error: {response.status_code}")
-                return "Couldn't fetch a cat fact right now."
+                return self.persona_manager.get_api_error_response("cat_facts")
                 
         except requests.exceptions.Timeout:
             logger.warning("Cat fact API request timed out")
-            return "Cat fact API request timed out."
+            return self.persona_manager.get_timeout_response("cat facts API")
         except requests.exceptions.RequestException as e:
             logger.error(f"Cat fact API error: {e}")
             print(f"⚠️ Cat fact API error: {e}")
-            return "Can't get cat facts right now!"
+            return self.persona_manager.get_api_error_response("cat_facts")
     
     async def get_usage_stats(self, user_id):
         """Get personalized usage statistics"""
@@ -327,7 +327,7 @@ class TsundereUtilities:
             all_convs = await ai_db.get_conversation_history(user_id, limit=1000)
             
             if not all_convs:
-                return "You haven't chatted with me much yet! Start a conversation to build up some stats."
+                return self.persona_manager.get_utility_response("stats", "no_data")
             
             # Analyze usage patterns
             total_conversations = len(all_convs)
@@ -372,4 +372,4 @@ class TsundereUtilities:
             
         except Exception as e:
             logger.error(f"Error in usage stats: {e}")
-            return "Unable to retrieve your usage statistics right now."
+            return self.persona_manager.get_utility_response("stats", "error")
