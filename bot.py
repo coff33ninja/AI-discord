@@ -237,12 +237,12 @@ async def ask_gemini(ctx, *, question):
                     except Exception:
                         relationship_level = 'stranger'
 
-                    user_question = f"""The user {ctx.author.display_name} asked: \"{question}\"\n{context_text}\nI searched the web and found this information:\n{search_results}\n\nYour task:\n1. Answer the user's question using both your knowledge AND the search results\n2. Use the conversation history to provide continuity and remember what you've discussed\n3. Maintain your tsundere personality throughout\n4. If the search results are relevant, incorporate them naturally\n5. If the search results aren't helpful, rely on your knowledge but mention you tried to search\n6. Keep your response under 1800 characters for Discord\n7. Use your speech patterns: \"Ugh\", \"baka\", \"It's not like...\", etc.\n\nBe helpful but act annoyed about having to search for them."""
+                    user_question = f"""The user {ctx.author.display_name} asked: \"{question}\"\n{context_text}\nI searched the web and found this information:\n{search_results}\n\nYour task:\n1. Answer using both your knowledge AND the search results\n2. Use the conversation history to provide continuity and remember what you've discussed\n3. If the search results are relevant, incorporate them naturally\n4. If the search results aren't helpful, rely on your knowledge but mention you tried to search\n5. Keep your response under 1800 characters for Discord"""
 
                     enhanced_prompt = persona_manager.get_ai_prompt(user_question, relationship_level)
                 except Exception:
-                    # Fallback to legacy inline prompt if persona manager fails
-                    enhanced_prompt = f"""You are Akino, a tsundere AI assistant. The user {ctx.author.display_name} asked: \"{question}\"\n{context_text}\nI searched the web and found this information:\n{search_results}\n\nYour task:\n1. Answer the user's question using both your knowledge AND the search results\n2. Use the conversation history to provide continuity and remember what you've discussed\n3. Maintain your tsundere personality throughout\n4. If the search results are relevant, incorporate them naturally\n5. If the search results aren't helpful, rely on your knowledge but mention you tried to search\n6. Keep your response under 1800 characters for Discord\n7. Use your speech patterns: \"Ugh\", \"baka\", \"It's not like...\", etc.\n\nBe helpful but act annoyed about having to search for them."""
+                    # Fallback to generic prompt if persona manager fails
+                    enhanced_prompt = f"""You are a helpful AI assistant. The user {ctx.author.display_name} asked: \"{question}\"\n{context_text}\nI found this information:\n{search_results}\n\nPlease answer the user's question using both your knowledge and these search results. Keep your response under 1800 characters."""
 
                 response_text = await api_manager.generate_content(enhanced_prompt)
                 model_used = "gemini-pro-search"
@@ -396,12 +396,12 @@ async def help_command(ctx):
     
     # Use ResponseHandler to create a formatted embed
     embed = ResponseHandler.create_info_embed(
-        title=help_config.get("title", "Akino's Commands"),
-        description=help_config.get("description", "Here are the commands I 'reluctantly' offer..."),
+        title=help_config.get("title", "Available Commands"),
+        description=help_config.get("description", "Here are the commands I can help you with:"),
         fields=[
             {
                 'name': "**AI & Chat**",
-                'value': "`!ai <question>` (or `!ask`, `!chat`) - Ask me stuff, I guess...\n`!compliment` - Compliment me (watch me get flustered)\n`!mood` - Check my current mood\n`!relationship` - See how close we are\n`!memory [number]` - View/adjust conversation memory",
+                'value': "`!ai <question>` (or `!ask`, `!chat`) - Ask me anything\n`!compliment` - Send a compliment\n`!mood` - Check my current mood\n`!relationship` - See your relationship status\n`!memory [number]` - View/adjust conversation memory",
                 'inline': False
             },
             {
@@ -690,7 +690,7 @@ async def set_reminder(ctx, *, reminder_input):
             response = persona_manager.get_activity_response("reminders", "reminder_created",
                                                           message=message_part, time=time_str, reminder_id=reminder_id)
         except Exception:
-            response = f"Ugh, fine! I'll remind you about '{message_part}' at {time_str}. Don't blame me if you forget anyway, baka! (Reminder ID: {reminder_id})"
+            response = f"Reminder set for '{message_part}' at {time_str}. (Reminder ID: {reminder_id})"
 
         await ctx.send(response)
         logger.info(f"Reminder set for user {ctx.author.id}: {message_part} at {remind_time}")
@@ -711,14 +711,14 @@ async def list_reminders(ctx):
             try:
                 no_reminders_msg = persona_manager.get_activity_response("reminders", "no_reminders")
             except Exception:
-                no_reminders_msg = "You don't have any active reminders. It's not like I'm disappointed or anything!"
+                no_reminders_msg = "You don't have any active reminders."
             await ctx.send(no_reminders_msg)
             return
         
         # Use persona-provided titles/descriptions when available
         reminders_cfg = persona_manager.persona.get("activity_responses", {}).get("reminders", {})
         embed_title = reminders_cfg.get("list_title", "📝 Your Active Reminders")
-        embed_description = reminders_cfg.get("list_description", "Here are your reminders, baka!")
+        embed_description = reminders_cfg.get("list_description", "Here are your active reminders:")
 
         embed = discord.Embed(
             title=embed_title,
@@ -757,13 +757,13 @@ async def cancel_reminder(ctx, reminder_id: int):
             try:
                 msg = persona_manager.get_activity_response("reminders", "reminder_cancelled", reminder_id=reminder_id)
             except Exception:
-                msg = f"✅ Fine! I cancelled reminder {reminder_id}. It's not like I wanted to remind you anyway!"
+                msg = f"✅ Reminder {reminder_id} has been cancelled."
             await ctx.send(msg)
         else:
             try:
                 msg = persona_manager.get_activity_response("reminders", "reminder_not_found", reminder_id=reminder_id)
             except Exception:
-                msg = f"❌ I couldn't find reminder {reminder_id}. Are you sure it exists, baka?"
+                msg = f"❌ Reminder {reminder_id} not found."
             await ctx.send(msg)
         
     except Exception as e:
@@ -800,7 +800,7 @@ async def subscribe_feature(ctx, feature_type: str):
             try:
                 msg = persona_manager.get_activity_response("subscriptions", "subscribed", feature_name=feature_name)
             except Exception:
-                msg = f"✅ Fine! You're now subscribed to {feature_name}. Don't expect me to be excited about it!"
+                msg = f"✅ You're now subscribed to {feature_name}."
             await ctx.send(msg)
         else:
             await ctx.send("❌ Something went wrong with the subscription!")
@@ -825,13 +825,13 @@ async def unsubscribe_feature(ctx, feature_type: str):
             try:
                 msg = persona_manager.get_activity_response("subscriptions", "unsubscribed", feature_name=feature_type)
             except Exception:
-                msg = f"✅ Fine! You're unsubscribed from {feature_type}. I wasn't enjoying sending you those anyway!"
+                msg = f"✅ You're now unsubscribed from {feature_type}."
             await ctx.send(msg)
         else:
             try:
                 msg = persona_manager.get_activity_response("subscriptions", "not_subscribed", feature_name=feature_type)
             except Exception:
-                msg = f"❌ You weren't subscribed to {feature_type} anyway, baka!"
+                msg = f"❌ You were not subscribed to {feature_type}."
             await ctx.send(msg)
         
     except Exception as e:
@@ -850,7 +850,7 @@ async def list_subscriptions(ctx):
             try:
                 msg = persona_manager.get_activity_response("subscriptions", "no_subscriptions")
             except Exception:
-                msg = "You don't have any active subscriptions. It's not like I care!"
+                msg = "You don't have any active subscriptions."
             await ctx.send(msg)
             return
         
