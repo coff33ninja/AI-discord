@@ -158,7 +158,7 @@ Be helpful but act annoyed about having to search for them."""
                 response_text = await api_manager.generate_content(enhanced_prompt)
                 
                 if response_text:
-                    logger.info(f"Enhanced AI response generated successfully")
+                    logger.info("Enhanced AI response generated successfully")
                     print(f"🤖 Enhanced AI response with search: {response_text[:100]}...")
                 else:
                     # Fallback to normal AI if enhanced fails
@@ -189,7 +189,7 @@ Be helpful but act annoyed about having to search for them."""
             else:
                 await ctx.send(response_text)
             
-            logger.info(f"AI response sent successfully")
+            logger.info("AI response sent successfully")
                 
     except Exception as e:
         logger.error(f"AI command error: {str(e)}")
@@ -327,6 +327,8 @@ async def compliment_ai(ctx):
 @bot.command(name='mood')
 async def check_mood(ctx):
     """Check the AI's current mood"""
+    logger.info(f"Mood command called by user {ctx.author.id}")
+    
     user_data = social.get_user_relationship(ctx.author.id)
     relationship_level = user_data['relationship_level']
     
@@ -338,17 +340,23 @@ async def check_mood(ctx):
     
     if response:
         await ctx.send(response)
+        logger.info(f"Mood response sent to user {ctx.author.id}")
     else:
         # Fallback to persona card response
+        logger.warning("AI response failed, using fallback for mood command")
         fallback = personality.get_error_response("AI unavailable")
         await ctx.send(fallback)
 
 @bot.command(name='relationship')
 async def check_relationship(ctx):
     """Check your relationship status with the AI"""
+    logger.info(f"Relationship command called by user {ctx.author.id}")
+    
     user_data = social.get_user_relationship(ctx.author.id)
     relationship_level = user_data['relationship_level']
     interactions = user_data['interactions']
+    
+    logger.info(f"User {ctx.author.id} relationship level: {relationship_level}, interactions: {interactions}")
     
     # Generate AI response for relationship command
     prompt = persona_manager.create_ai_prompt(
@@ -359,8 +367,10 @@ async def check_relationship(ctx):
     
     if response:
         await ctx.send(response)
+        logger.info(f"Relationship response sent to user {ctx.author.id}")
     else:
         # Fallback to persona card response with relationship info
+        logger.warning("AI response failed, using fallback for relationship command")
         fallback = persona_manager.get_relationship_response(relationship_level, "greeting")
         await ctx.send(f"{fallback} (Interactions: {interactions}, Level: {relationship_level})")
 
@@ -368,30 +378,35 @@ async def check_relationship(ctx):
 @bot.command(name='time')
 async def get_time(ctx):
     """Get current time"""
+    logger.info(f"Time command called by user {ctx.author.id}")
     response = await utilities.get_time()
     await ctx.send(response)
 
 @bot.command(name='calc')
 async def calculate(ctx, *, expression):
     """Calculator with attitude"""
+    logger.info(f"Calc command called by user {ctx.author.id}, expression: {expression}")
     response = await utilities.calculate(expression)
     await ctx.send(response)
 
 @bot.command(name='dice')
 async def roll_dice(ctx, sides: int = 6):
     """Roll dice"""
+    logger.info(f"Dice command called by user {ctx.author.id}, sides: {sides}")
     response = await utilities.roll_dice(sides)
     await ctx.send(response)
 
 @bot.command(name='flip')
 async def flip_coin(ctx):
     """Flip a coin"""
+    logger.info(f"Flip command called by user {ctx.author.id}")
     response = await utilities.flip_coin()
     await ctx.send(response)
 
 @bot.command(name='weather')
 async def get_weather(ctx, *, location):
     """Get weather using real API"""
+    logger.info(f"Weather command called by user {ctx.author.id}, location: {location}")
     async with ctx.typing():
         response = await utilities.get_weather(location)
     await ctx.send(response)
@@ -399,6 +414,7 @@ async def get_weather(ctx, *, location):
 @bot.command(name='fact')
 async def get_fact(ctx):
     """Get a random fact"""
+    logger.info(f"Fact command called by user {ctx.author.id}")
     async with ctx.typing():
         response = await utilities.get_random_fact()
     await ctx.send(response)
@@ -406,6 +422,7 @@ async def get_fact(ctx):
 @bot.command(name='joke')
 async def get_joke(ctx):
     """Get a random joke"""
+    logger.info(f"Joke command called by user {ctx.author.id}")
     async with ctx.typing():
         response = await utilities.get_joke()
     await ctx.send(response)
@@ -413,6 +430,7 @@ async def get_joke(ctx):
 @bot.command(name='catfact')
 async def get_cat_fact(ctx):
     """Get a random cat fact"""
+    logger.info(f"Cat fact command called by user {ctx.author.id}")
     async with ctx.typing():
         response = await utilities.get_cat_fact()
     await ctx.send(response)
@@ -422,8 +440,11 @@ async def get_cat_fact(ctx):
 async def search_web(ctx, *, query):
     """Search the web using DuckDuckGo"""
     try:
+        logger.info(f"Search command called by user {ctx.author.id}, query: {query}")
+        
         # Check if search module is initialized
         if search is None:
+            logger.warning("Search module not initialized")
             await ctx.send("Search module not ready yet! Try again in a moment.")
             return
         
@@ -437,9 +458,11 @@ async def search_web(ctx, *, query):
             response = await search.search_duckduckgo(query, use_ai_analysis=True)
         
         print(f"📝 Search response: {response[:100]}...")
+        logger.info(f"Search completed, response length: {len(response)}")
         
         # Discord has a 2000 character limit for messages
         if len(response) > 2000:
+            logger.info("Response too long, splitting into chunks")
             # Split long responses
             chunks = [response[i:i+2000] for i in range(0, len(response), 2000)]
             for chunk in chunks:
@@ -448,6 +471,7 @@ async def search_web(ctx, *, query):
             await ctx.send(response)
             
     except Exception as e:
+        logger.error(f"Search command error: {str(e)}")
         print(f"💥 Search command error: {str(e)}")
         await ctx.send(personality.get_error_response(e))
 
@@ -455,8 +479,11 @@ async def search_web(ctx, *, query):
 async def web_search_command(ctx, *, query):
     """Alternative web search using HTML parsing"""
     try:
+        logger.info(f"Web search command called by user {ctx.author.id}, query: {query}")
+        
         # Check if search module is initialized
         if search is None:
+            logger.warning("Search module not initialized")
             await ctx.send("Search module not ready yet! Try again in a moment.")
             return
         
@@ -470,9 +497,11 @@ async def web_search_command(ctx, *, query):
             response = await search.search_duckduckgo(query, use_ai_analysis=False)
         
         print(f"📝 Web search response: {response[:100]}...")
+        logger.info(f"Web search completed, response length: {len(response)}")
         
         # Discord has a 2000 character limit for messages
         if len(response) > 2000:
+            logger.info("Response too long, splitting into chunks")
             # Split long responses
             chunks = [response[i:i+2000] for i in range(0, len(response), 2000)]
             for chunk in chunks:
@@ -481,6 +510,7 @@ async def web_search_command(ctx, *, query):
             await ctx.send(response)
             
     except Exception as e:
+        logger.error(f"Web search command error: {str(e)}")
         print(f"💥 Web search command error: {str(e)}")
         await ctx.send(personality.get_error_response(e))
 
@@ -488,7 +518,10 @@ async def web_search_command(ctx, *, query):
 @bot.command(name='game')
 async def start_game(ctx, game_type=None, max_number: int = 100):
     """Start a game"""
+    logger.info(f"Game command called by user {ctx.author.id}, type: {game_type}, max: {max_number}")
+    
     if game_type is None:
+        logger.warning(f"Game command missing arguments from user {ctx.author.id}")
         await ctx.send(personality.get_missing_args_response() + " Try `!game guess` for number guessing!")
         return
     
@@ -496,11 +529,13 @@ async def start_game(ctx, game_type=None, max_number: int = 100):
         response = await games.start_number_guessing(ctx.author.id, max_number)
         await ctx.send(response)
     else:
+        logger.warning(f"Unknown game type requested by user {ctx.author.id}: {game_type}")
         await ctx.send(personality.get_missing_args_response() + " I only know 'guess' games right now! Try `!game guess`!")
 
 @bot.command(name='guess')
 async def make_guess(ctx, number: int):
     """Make a guess in the number game"""
+    logger.info(f"Guess command called by user {ctx.author.id}, number: {number}")
     response = await games.guess_number(ctx.author.id, number)
     await ctx.send(response)
 
@@ -511,7 +546,10 @@ async def rock_paper_scissors(ctx, choice=None):
     if choice is None and ctx.invoked_with in ['rock', 'paper', 'scissors']:
         choice = ctx.invoked_with
     
+    logger.info(f"RPS command called by user {ctx.author.id}, choice: {choice}")
+    
     if choice is None:
+        logger.warning(f"RPS command missing arguments from user {ctx.author.id}")
         await ctx.send(personality.get_missing_args_response() + " Pick rock, paper, or scissors! Try `!rps rock` or just `!rock`!")
         return
     
@@ -521,6 +559,7 @@ async def rock_paper_scissors(ctx, choice=None):
 @bot.command(name='8ball')
 async def magic_8ball(ctx, *, question):
     """Ask the magic 8-ball"""
+    logger.info(f"8-ball command called by user {ctx.author.id}, question: {question[:50]}")
     async with ctx.typing():
         response = await games.magic_8ball(question)
     await ctx.send(response)
@@ -528,6 +567,7 @@ async def magic_8ball(ctx, *, question):
 @bot.command(name='trivia')
 async def start_trivia(ctx):
     """Start a trivia game"""
+    logger.info(f"Trivia command called by user {ctx.author.id}")
     async with ctx.typing():
         response = await games.trivia_game(ctx.author.id)
     await ctx.send(response)
@@ -535,6 +575,7 @@ async def start_trivia(ctx):
 @bot.command(name='answer')
 async def answer_trivia(ctx, *, answer):
     """Answer the trivia question"""
+    logger.info(f"Answer command called by user {ctx.author.id}, answer: {answer[:50]}")
     response = await games.answer_trivia(ctx.author.id, answer)
     await ctx.send(response)
 
