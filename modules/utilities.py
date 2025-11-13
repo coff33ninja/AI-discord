@@ -1,9 +1,11 @@
-"""Utility functions module - helpful tools with persona-driven responses"""
+"""Utility functions module - helpful tools with persona-driven responses and memory awareness"""
 import random
 import datetime
 import requests
+import json
 from .persona_manager import PersonaManager
 from .logger import BotLogger
+from .ai_database import ai_db
 
 # Initialize logger
 logger = BotLogger.get_logger(__name__)
@@ -34,9 +36,27 @@ class TsundereUtilities:
             print(f"⚠️ Error retrieving persona response: {e}")
         return None
     
-    async def get_weather(self, location):
-        """Get weather info using OpenWeatherMap API"""
+    async def get_weather(self, location, user_id=None):
+        """Get weather info using OpenWeatherMap API with memory awareness"""
         try:
+            # Memory-aware location handling
+            if not location and user_id:
+                # Try to get user's previous weather locations
+                try:
+                    conversations = await ai_db.get_conversation_history(user_id, limit=20)
+                    for conv in conversations:
+                        if 'weather' in conv['message_content'].lower():
+                            # Extract location from previous weather requests
+                            words = conv['message_content'].split()
+                            if 'weather' in words:
+                                weather_idx = words.index('weather')
+                                if weather_idx + 1 < len(words):
+                                    location = ' '.join(words[weather_idx + 1:]).strip()
+                                    if location:
+                                        break
+                except Exception as e:
+                    logger.warning(f"Error retrieving weather history: {e}")
+            
             if not isinstance(location, str) or not location.strip():
                 logger.warning(f"Invalid weather location: {location}")
                 return "Please provide a valid location."
@@ -57,7 +77,23 @@ class TsundereUtilities:
                 
                 weather_info = f"{temp}°C with {description}. Feels like {feels_like}°C"
                 logger.info(f"Weather retrieved for {location}: {weather_info}")
-                persona_msg = self._get_persona_response("utilities", "weather", location=location, weather_info=weather_info)
+                
+                # Check if user has asked for this location before
+                is_repeat_location = False
+                if user_id:
+                    try:
+                        conversations = await ai_db.get_conversation_history(user_id, limit=10)
+                        for conv in conversations:
+                            if location.lower() in conv['message_content'].lower() and 'weather' in conv['message_content'].lower():
+                                is_repeat_location = True
+                                break
+                    except Exception:
+                        pass
+                
+                persona_msg = self._get_persona_response("utilities", "weather", 
+                                                       location=location, 
+                                                       weather_info=weather_info,
+                                                       is_repeat=is_repeat_location)
                 return persona_msg or f"Weather in {location}: {weather_info}"
             else:
                 logger.warning(f"Weather API error for {location}: {response.status_code}")
@@ -77,7 +113,7 @@ class TsundereUtilities:
             # Validate sides parameter (2-1000 range)
             if not isinstance(sides, int) or sides < 2 or sides > 1000:
                 logger.warning(f"Invalid dice sides: {sides}")
-                return f"Please specify a valid number of sides (2-1000)."
+                return "Please specify a valid number of sides (2-1000)."
             
             result = random.randint(1, sides)
             logger.info(f"Dice rolled: {result} out of {sides}")
@@ -144,18 +180,54 @@ class TsundereUtilities:
             print(f"⚠️ Calculation error: {e}")
             return "I couldn't calculate that..."
     
-    async def get_random_fact(self):
-        """Get a random fact using an API"""
+    async def get_random_fact(self, user_id=None):
+        """Get a random fact using an API with memory awareness"""
         try:
             logger.info("Fetching random fact from API")
+            
+            # Memory-aware fact selection
+            user_interests = []
+            if user_id:
+                try:
+                    conversations = await ai_db.get_conversation_history(user_id, limit=30)
+                    for conv in conversations:
+                        message = conv['message_content'].lower()
+                        # Simple interest detection
+                        if any(word in message for word in ['space', 'astronomy', 'planet']):
+                            user_interests.append('space')
+                        if any(word in message for word in ['animal', 'cat', 'dog', 'wildlife']):
+                            user_interests.append('animals')
+                        if any(word in message for word in ['tech', 'computer', 'programming', 'code']):
+                            user_interests.append('technology')
+                except Exception as e:
+                    logger.warning(f"Error analyzing user interests: {e}")
+            
             response = requests.get(RANDOM_FACTS_API_URL, timeout=DEFAULT_TIMEOUT)
             
             if response.status_code == 200:
                 data = response.json()
                 fact = data['text']
                 logger.info(f"Random fact retrieved: {fact[:50]}...")
-                persona_msg = self._get_persona_response("utilities", "fact", fact=fact)
-                return persona_msg or f"Here's a fact: {fact}"
+                
+                # Add context if fact relates to user interests
+                interest_context = ""
+                if user_interests:
+                    fact_lower = fact.lower()
+                    for interest in set(user_interests):
+                        if interest == 'space' and any(word in fact_lower for word in ['space', 'planet', 'star', 'universe']):
+                            interest_context = "Since you seem interested in space, "
+                            break
+                        elif interest == 'animals' and any(word in fact_lower for word in ['animal', 'cat', 'dog', 'bird', 'fish']):
+                            interest_context = "Since you like animals, "
+                            break
+                        elif interest == 'technology' and any(word in fact_lower for word in ['computer', 'tech', 'digital', 'internet']):
+                            interest_context = "Since you're into tech, "
+                            break
+                
+                persona_msg = self._get_persona_response("utilities", "fact", 
+                                                       fact=fact, 
+                                                       interest_context=interest_context)
+                return persona_msg or f"{interest_context}Here's a fact: {fact}"
             else:
                 logger.warning(f"Fact API error: {response.status_code}")
                 return "Couldn't fetch a fact right now."
@@ -168,19 +240,50 @@ class TsundereUtilities:
             print(f"⚠️ Fact API error: {e}")
             return "Can't get facts right now!"
     
-    async def get_joke(self):
-        """Get a random joke using an API"""
+    async def get_joke(self, user_id=None):
+        """Get a random joke using an API with memory awareness"""
         try:
             logger.info("Fetching random joke from API")
+            
+            # Analyze user's joke preferences from history
+            joke_feedback = {"positive": 0, "negative": 0}
+            if user_id:
+                try:
+                    conversations = await ai_db.get_conversation_history(user_id, limit=20)
+                    for i, conv in enumerate(conversations):
+                        if 'joke' in conv['message_content'].lower():
+                            # Look at the next message for reaction
+                            if i > 0:
+                                next_msg = conversations[i-1]['message_content'].lower()
+                                if any(word in next_msg for word in ['haha', 'funny', 'good', 'lol', 'love']):
+                                    joke_feedback["positive"] += 1
+                                elif any(word in next_msg for word in ['bad', 'terrible', 'not funny', 'boring']):
+                                    joke_feedback["negative"] += 1
+                except Exception as e:
+                    logger.warning(f"Error analyzing joke preferences: {e}")
+            
             response = requests.get(JOKES_API_URL, timeout=DEFAULT_TIMEOUT)
             
             if response.status_code == 200:
                 data = response.json()
                 setup = data['setup']
                 punchline = data['punchline']
-                logger.info(f"Joke retrieved")
-                persona_msg = self._get_persona_response("utilities", "joke", setup=setup, punchline=punchline)
-                return persona_msg or f"Here's a joke:\n{setup}\n{punchline}"
+                logger.info("Joke retrieved")
+                
+                # Add context based on joke history
+                joke_context = ""
+                total_feedback = joke_feedback["positive"] + joke_feedback["negative"]
+                if total_feedback > 2:
+                    if joke_feedback["positive"] > joke_feedback["negative"]:
+                        joke_context = "You seem to like my jokes, so here's another one! "
+                    else:
+                        joke_context = "Let me try a different style of humor... "
+                
+                persona_msg = self._get_persona_response("utilities", "joke", 
+                                                       setup=setup, 
+                                                       punchline=punchline,
+                                                       joke_context=joke_context)
+                return persona_msg or f"{joke_context}Here's a joke:\n{setup}\n{punchline}"
             else:
                 logger.warning(f"Joke API error: {response.status_code}")
                 return "Couldn't fetch a joke right now."
@@ -216,3 +319,57 @@ class TsundereUtilities:
             logger.error(f"Cat fact API error: {e}")
             print(f"⚠️ Cat fact API error: {e}")
             return "Can't get cat facts right now!"
+    
+    async def get_usage_stats(self, user_id):
+        """Get personalized usage statistics"""
+        try:
+            # Get all user conversations
+            all_convs = await ai_db.get_conversation_history(user_id, limit=1000)
+            
+            if not all_convs:
+                return "You haven't chatted with me much yet! Start a conversation to build up some stats."
+            
+            # Analyze usage patterns
+            total_conversations = len(all_convs)
+            
+            # Most used commands
+            commands = {}
+            for conv in all_convs:
+                if conv.get('context_data'):
+                    try:
+                        context = json.loads(conv['context_data']) if isinstance(conv['context_data'], str) else conv['context_data']
+                        cmd = context.get('command_used', 'unknown')
+                        commands[cmd] = commands.get(cmd, 0) + 1
+                    except Exception:
+                        pass
+            
+            # Time analysis
+            if len(all_convs) > 1:
+                first_conv = datetime.datetime.fromisoformat(all_convs[-1]['timestamp'].replace('Z', '+00:00'))
+                last_conv = datetime.datetime.fromisoformat(all_convs[0]['timestamp'].replace('Z', '+00:00'))
+                days_active = (last_conv - first_conv).days + 1
+                avg_per_day = total_conversations / max(days_active, 1)
+            else:
+                days_active = 1
+                avg_per_day = 1
+            
+            stats = f"""📊 Your Chat Statistics:
+            
+**Total Conversations:** {total_conversations}
+**Days Active:** {days_active}
+**Average per Day:** {avg_per_day:.1f}
+            
+**Most Used Commands:**"""
+            
+            if commands:
+                sorted_commands = sorted(commands.items(), key=lambda x: x[1], reverse=True)[:3]
+                for cmd, count in sorted_commands:
+                    stats += f"\n• {cmd}: {count} times"
+            else:
+                stats += "\n• No command data available"
+            
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Error in usage stats: {e}")
+            return "Unable to retrieve your usage statistics right now."

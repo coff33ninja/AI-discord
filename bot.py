@@ -366,7 +366,7 @@ async def help_command(ctx):
             },
             {
                 'name': "**Utilities**",
-                'value': "`!time` - Get current time\n`!calc <math>` - Calculator\n`!dice [sides]` - Roll dice\n`!flip` - Flip a coin\n`!weather <city>` - Real weather info\n`!fact` - Random fact\n`!joke` - Random joke\n`!catfact` - Cat facts",
+                'value': "`!time` - Get current time\n`!calc <math>` - Calculator\n`!dice [sides]` - Roll dice\n`!flip` - Flip a coin\n`!weather <city>` - Real weather info\n`!fact` - Random fact\n`!joke` - Random joke\n`!catfact` - Cat facts\n`!stats` - Your usage statistics",
                 'inline': False
             },
             {
@@ -565,7 +565,7 @@ async def get_weather(ctx, *, location):
     """Get weather using real API"""
     logger.info(f"Weather command called by user {ctx.author.id}, location: {location}")
     async with ctx.typing():
-        response = await utilities.get_weather(location)
+        response = await utilities.get_weather(location, str(ctx.author.id))
     await ctx.send(response)
 
 @bot.command(name='fact')
@@ -573,7 +573,7 @@ async def get_fact(ctx):
     """Get a random fact"""
     logger.info(f"Fact command called by user {ctx.author.id}")
     async with ctx.typing():
-        response = await utilities.get_random_fact()
+        response = await utilities.get_random_fact(str(ctx.author.id))
     await ctx.send(response)
 
 @bot.command(name='joke')
@@ -581,7 +581,7 @@ async def get_joke(ctx):
     """Get a random joke"""
     logger.info(f"Joke command called by user {ctx.author.id}")
     async with ctx.typing():
-        response = await utilities.get_joke()
+        response = await utilities.get_joke(str(ctx.author.id))
     await ctx.send(response)
 
 @bot.command(name='catfact')
@@ -590,6 +590,14 @@ async def get_cat_fact(ctx):
     logger.info(f"Cat fact command called by user {ctx.author.id}")
     async with ctx.typing():
         response = await utilities.get_cat_fact()
+    await ctx.send(response)
+
+@bot.command(name='stats', aliases=['mystats', 'usage'])
+async def get_user_stats(ctx):
+    """Get your personal usage statistics"""
+    logger.info(f"Stats command called by user {ctx.author.id}")
+    async with ctx.typing():
+        response = await utilities.get_usage_stats(str(ctx.author.id))
     await ctx.send(response)
 
 # Search Commands
