@@ -86,8 +86,8 @@ class GeminiAPIManager:
     def _configure_current_key(self):
         """Configure the current API key"""
         if not self.api_keys:
-            logger.error("No API keys available")
-            raise ValueError("No API keys available")
+            logger.warning("No API keys available yet")
+            return None
         
         current_key = self.api_keys[self.current_key_index]
         genai.configure(api_key=current_key)
@@ -99,6 +99,11 @@ class GeminiAPIManager:
         return self.models[self.current_key_index]
     
     def get_current_model(self):
+        """Get the current Gemini model"""
+        model = self._configure_current_key()
+        if model is None:
+            logger.warning("No API keys loaded, model will be None until configuration is validated")
+        return model
         """Get the current Gemini model"""
         return self._configure_current_key()
     

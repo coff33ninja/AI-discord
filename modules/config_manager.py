@@ -64,14 +64,24 @@ LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
 class ConfigManager:
     """Centralized configuration management for the bot"""
     
-    def __init__(self):
-        """Initialize configuration from environment"""
+    def __init__(self, validate=False):
+        """
+        Initialize configuration from environment
+        
+        Args:
+            validate: If True, validate configuration immediately. If False, defer validation.
+        """
         self._load_gemini_keys()
-        self.validate_config()
+        if validate:
+            self.validate_config()
     
     def _load_gemini_keys(self):
         """Load Gemini API keys from environment"""
         global GEMINI_API_KEYS
+        
+        # Only load if not already loaded
+        if GEMINI_API_KEYS:
+            return
         
         # Primary key
         primary_key = os.getenv('GEMINI_API_KEY')
@@ -90,7 +100,11 @@ class ConfigManager:
     
     def validate_config(self):
         """Validate required configuration"""
-        if not BOT_TOKEN:
+        # Reload the environment variables in case they were set after initialization
+        load_dotenv()
+        
+        bot_token = os.getenv('DISCORD_BOT_TOKEN')
+        if not bot_token:
             raise ValueError("DISCORD_BOT_TOKEN environment variable is required")
         
         if not GEMINI_API_KEYS:

@@ -24,12 +24,12 @@ logger = BotLogger.get_logger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Initialize Config Manager
-config = ConfigManager()
+# Initialize Config Manager (defer validation until bot starts)
+config = ConfigManager(validate=False)
 
 # Initialize API Manager with rotating keys
 api_manager = GeminiAPIManager()
-model = api_manager.get_current_model()
+model = api_manager.get_current_model()  # May be None if no keys are loaded yet
 
 # Bot setup
 intents = discord.Intents.default()
@@ -47,7 +47,30 @@ search = None  # Will be initialized after model is ready
 
 @bot.event
 async def on_ready():
-    global utilities, search
+    global utilities, search, model
+    
+    # Validate configuration on first connection
+    try:
+        config.validate_config()
+        logger.info("Configuration validated successfully")
+    except ValueError as e:
+        logger.error(f"Configuration validation failed: {e}")
+        print(f"❌ Configuration Error: {e}")
+        await bot.close()
+        return
+    
+    # Reinitialize model and API manager after config is validated
+    logger.info("Reinitializing API manager with validated configuration")
+    api_manager._load_keys_from_env()
+    api_manager._init_usage_tracking()
+    model = api_manager.get_current_model()
+    
+    if model is None:
+        logger.error("Failed to initialize model after configuration validation")
+        print("❌ Failed to initialize model")
+        await bot.close()
+        return
+    
     logger.info(f"Bot {bot.user} connected to Discord")
     logger.info(f"Bot is in {len(bot.guilds)} guilds")
     print(f'{bot.user} has connected to Discord!')
@@ -896,7 +919,14 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     
     try:
-        bot.run(os.getenv('DISCORD_TOKEN'))
+        token = os.getenv('DISCORD_BOT_TOKEN')
+        if not token:
+            print("❌ Error: DISCORD_BOT_TOKEN environment variable not set!")
+            print("📋 Please create a .env file with your Discord bot token.")
+            print("📝 You can copy .env.example and fill in your values.")
+            sys.exit(1)
+        
+        bot.run(token)
     except KeyboardInterrupt:
         print('\n🛑 Bot interrupted by user')
         # Save any pending data and cleanup
