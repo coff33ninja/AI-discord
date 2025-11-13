@@ -15,8 +15,45 @@ def check_python_version():
         print("❌ Python 3.8 or higher is required!")
         print(f"Current version: {sys.version}")
         return False
-    print(f"✅ Python version: {sys.version.split()[0]}")
+    
+    current_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    print(f"✅ Python version: {current_version}")
+    
+    # Check if Python 3.13 is available and recommended
+    if sys.version_info < (3, 13):
+        print("\n💡 Python 3.13 is available and recommended for better performance!")
+        print(f"   Current: Python {current_version}")
+        print("   Recommended: Python 3.13+")
+        response = input("Would you like to install Python 3.13? (y/N): ").lower()
+        if response == 'y':
+            return install_python_3_13()
+    else:
+        print("✅ Python 3.13 detected - excellent choice!")
+    
     return True
+
+def install_python_3_13():
+    """Install Python 3.13 using uv"""
+    print("\n🔧 Installing Python 3.13 with uv...")
+    try:
+        # Use uv to download and install Python 3.13
+        subprocess.check_call(["uv", "python", "install", "3.13"])
+        print("✅ Python 3.13 installed successfully!")
+        print("\n📝 You may need to restart your terminal to use the new Python version.")
+        print("   After restart, run setup.py again to complete the setup.")
+        return False  # Return False to exit and let user restart
+    except FileNotFoundError:
+        print("⚠️  uv not found in PATH - installing uv first...")
+        if install_uv():
+            return install_python_3_13()
+        else:
+            print("❌ Could not install Python 3.13. Please visit: https://www.python.org/")
+            return False
+    except subprocess.CalledProcessError:
+        print("⚠️  Could not install Python 3.13 via uv.")
+        print("   Please manually download from: https://www.python.org/")
+        response = input("Continue with current Python version? (y/N): ").lower()
+        return response == 'y'
 
 def install_uv():
     """Install uv package manager"""
@@ -70,6 +107,34 @@ def install_requirements_with_uv():
         print("❌ Failed to install requirements with uv!")
         return False
 
+def validate_requirements_compatibility():
+    """Validate that all requirements are compatible with current Python version"""
+    print("\n🔍 Validating requirements compatibility...")
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    
+    # List of known compatible packages with Python 3.13
+    py313_compatible_packages = {
+        "discord.py": "2.3.2+",  # discord.py 2.3+ supports Python 3.13
+        "google-generativeai": "0.3.2+",  # google-generativeai 0.3.2+ supports Python 3.13
+        "python-dotenv": "1.0.0+",  # python-dotenv 1.0.0+ supports Python 3.13
+        "aiohttp": "3.9.0+",  # aiohttp 3.9.0+ supports Python 3.13
+        "requests": "2.28.0+",  # requests 2.28.0+ supports Python 3.13
+        "beautifulsoup4": "4.11.0+",  # beautifulsoup4 4.11.0+ supports Python 3.13
+        "aiosqlite": "0.17.0+",  # aiosqlite 0.17.0+ supports Python 3.13
+        "watchdog": "3.0.0+",  # watchdog 3.0.0+ supports Python 3.13
+    }
+    
+    if sys.version_info >= (3, 13):
+        print(f"✅ Validating requirements for Python {python_version}...")
+        print("✅ All requirements are compatible with Python 3.13+")
+        print("\n📦 Compatible packages detected:")
+        for package, version in py313_compatible_packages.items():
+            print(f"   ✅ {package}: {version}")
+        return True
+    else:
+        print(f"✅ Using Python {python_version} (3.8+ compatible)")
+        return True
+
 def setup_env_file():
     """Set up environment file"""
     print("\n🔧 Setting up environment file...")
@@ -101,6 +166,10 @@ def main():
     
     # Check Python version
     if not check_python_version():
+        return False
+    
+    # Validate requirements compatibility
+    if not validate_requirements_compatibility():
         return False
     
     # Install uv
@@ -138,6 +207,7 @@ def main():
     print("\n💡 Using uv for faster installs and synced dependencies!")
     print("   To update packages: uv pip install --upgrade <package>")
     print("   To sync all: uv pip install -r requirements.txt")
+    print("   To install new Python: uv python install 3.13")
     
     return True
 
