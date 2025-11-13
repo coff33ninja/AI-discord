@@ -768,6 +768,94 @@ async def add_followup(ctx, *, payload: str):
         logger.error(f"Error in followup command: {e}")
         await ctx.send(f"❌ Error saving followup: {e}")
 
+
+@bot.command(name='follow')
+async def follow_lookup(ctx, *, question: str):
+    """Lookup a follow-up answer from the knowledge base, or ask the AI and save the result.
+
+    Usage: `!follow <question>`
+    Behavior:
+    - Search `knowledge_manager` (category 'followup') for matches; return the top match(s) if found.
+    - If no KB match, call `api_manager.generate_content()` (Gemini) to generate an answer, send it, and persist it to the KB.
+    """
+    logger.info(f"follow command called by user {ctx.author.id}, question: {question[:200]}")
+    async with ctx.typing():
+        try:
+            # 1) Try KB lookup first
+            found = []
+            try:
+                if 'knowledge_manager' in globals() and knowledge_manager:
+                    found = await knowledge_manager.search_knowledge(question, category='followup', limit=5)
+                else:
+                    found = await ai_db.search_knowledge(question, category='followup', limit=5)
+            except Exception:
+                found = []
+
+            if found:
+                # Return top match and offer more if available
+                top = found[0]
+                content = top.get('content') or top.get('answer') or top.get('data') or ''
+                key = top.get('key_term') or top.get('key') or question
+                reply = f"📚 Found stored follow-up for **{key}**:\n{content}"
+                # If multiple matches, summarize how many
+                if len(found) > 1:
+                    reply += f"\n\n({len(found)} related entries found — refine your question to get a different one.)"
+                await ctx.send(reply)
+                return
+
+            # 2) No KB result — fall back to AI generation (if available)
+            if not api_manager:
+                await ctx.send("I couldn't find that in my knowledge base and AI is unavailable right now.")
+                return
+
+            # Try to include persona context and relationship level if available
+            relationship_level = 'stranger'
+            try:
+                user_rel = social.get_user_relationship(ctx.author.id)
+                relationship_level = user_rel.get('relationship_level', 'stranger')
+            except Exception:
+                relationship_level = 'stranger'
+
+            try:
+                prompt = persona_manager.get_ai_prompt(question, relationship_level)
+            except Exception:
+                prompt = persona_manager.create_ai_prompt(question, ctx.author.display_name, relationship_level)
+
+            ai_response = None
+            try:
+                ai_response = await api_manager.generate_content(prompt)
+            except Exception as e:
+                logger.exception(f"AI fallback failed for follow: {e}")
+                await ctx.send(persona_manager.get_error_response('ai_unavailable'))
+                return
+
+            if not ai_response:
+                await ctx.send("I couldn't generate an answer right now. Try again later.")
+                return
+
+            # Persist the AI answer to KB for future reuse
+            try:
+                if 'knowledge_manager' in globals() and knowledge_manager:
+                    await knowledge_manager.add_knowledge('followup', question, ai_response)
+                else:
+                    await ai_db.add_knowledge('followup', question, ai_response)
+            except Exception:
+                logger.exception("Failed to persist AI followup to DB")
+
+            # Send the AI-generated answer
+            # If too long, split into chunks
+            text = ai_response.strip()
+            if len(text) > 1900:
+                chunks = [text[i:i+1900] for i in range(0, len(text), 1900)]
+                for chunk in chunks:
+                    await ctx.send(chunk)
+            else:
+                await ctx.send(text)
+
+        except Exception as e:
+            logger.error(f"Error in follow command: {e}")
+            await ctx.send(f"❌ Error handling follow request: {e}")
+
 @bot.command(name='joke')
 async def get_joke(ctx):
     """Get a random joke"""
