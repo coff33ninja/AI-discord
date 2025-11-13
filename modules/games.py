@@ -811,6 +811,68 @@ class TsundereGames:
                 else:
                     await ctx.send(f"⏰ Time's up! No one participated in the {qtype} round.")
             logger.info(f"No answers submitted for question {question_id}")
+            # Additionally: when trivia had no answers, fetch/display extra facts and persist them
+            try:
+                if qtype == 'trivia':
+                    try:
+                        correct_answer = question_data.get('answer')
+                        valid_answers = self._parse_answers(correct_answer)
+                        if not valid_answers:
+                            valid_answers = [correct_answer.lower().strip()]
+
+                        # Choose key_term: prefer DB matches, then multi-word variants, then longest
+                        key_term = None
+                        if valid_answers and (self.knowledge_manager or self.ai_db):
+                            best_candidate = None
+                            best_score = -1
+                            for candidate in valid_answers:
+                                try:
+                                    if self.knowledge_manager:
+                                        results = await self.knowledge_manager.search_knowledge(candidate, limit=1)
+                                    else:
+                                        results = await self.ai_db.search_knowledge(candidate, limit=1)
+                                except Exception:
+                                    results = []
+                                if results:
+                                    score = results[0].get('relevance_score') or 1.0
+                                    if score > best_score:
+                                        best_score = score
+                                        best_candidate = candidate
+                            if best_candidate:
+                                key_term = best_candidate
+
+                        if not key_term and valid_answers:
+                            key_term = max(valid_answers, key=lambda s: (len(s.split()), len(s)))
+                        if not key_term:
+                            key_term = correct_answer
+
+                        # Fetch additional facts and display them as bullets
+                        if (self.ai_db or self.api_manager) and key_term:
+                            facts = await self._fetch_additional_facts(key_term, max_facts=3)
+                            if facts:
+                                facts_display = "\n".join([f"- {f}" for f in facts])
+                                try:
+                                    await ctx.send(f"📚 Additional facts about **{key_term}**:\n{facts_display}")
+                                except Exception:
+                                    # ignore send errors
+                                    pass
+
+                                # Persist facts into the knowledge DB under 'facts'
+                                for fact in facts:
+                                    try:
+                                        if self.knowledge_manager:
+                                            await self.knowledge_manager.add_knowledge('facts', key_term, fact)
+                                        elif self.ai_db:
+                                            await self.ai_db.add_knowledge('facts', key_term, fact)
+                                    except Exception:
+                                        # Don't let persistence errors break result flow
+                                        logger.exception('Failed to persist fact to DB')
+                    except Exception:
+                        logger.exception('Error while fetching/storing additional facts for unanswered trivia')
+            except Exception:
+                # swallow any unexpected errors here to avoid breaking the overall flow
+                pass
+
             del self.active_questions[question_id]
             return
 
