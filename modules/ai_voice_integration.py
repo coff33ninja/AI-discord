@@ -204,14 +204,27 @@ class AIVoiceIntegration:
 
         Returns:
             bool: True if successful
+            
+        Raises:
+            Exception: Re-raises connection exceptions for better error handling
         """
         try:
+            # Check if already connected to avoid "already connected" errors
+            if self.voice_manager.is_connected(guild_id):
+                existing_vc = self.voice_manager.get_voice_client(guild_id)
+                if existing_vc and existing_vc.channel.id == channel.id:
+                    logger.info(f"Guild {guild_id} already connected to {channel.name}")
+                    return True
+                else:
+                    logger.info(f"Guild {guild_id} connected to different channel, switching...")
+            
             await self.voice_manager.connect_to_voice(channel)
             logger.info(f"Connected guild {guild_id} to voice channel")
             return True
         except Exception as e:
             logger.error(f"Failed to connect to voice: {str(e)}")
-            return False
+            # Re-raise the exception so the caller can handle it properly
+            raise
 
     async def disconnect_guild_from_voice(self, guild_id: int, guild) -> bool:
         """
@@ -233,6 +246,18 @@ class AIVoiceIntegration:
         except Exception as e:
             logger.error(f"Failed to disconnect from voice: {str(e)}")
             return False
+
+    async def cleanup_all_connections(self) -> None:
+        """
+        Clean up all voice connections and resources.
+        Should be called during bot shutdown.
+        """
+        try:
+            await self.voice_manager.cleanup_all_connections()
+            self.guild_voices.clear()
+            logger.info("AI Voice Integration cleanup completed")
+        except Exception as e:
+            logger.error(f"Error during AI Voice Integration cleanup: {e}")
 
     def is_connected_to_voice(self, guild_id: int) -> bool:
         """Check if guild is connected to voice."""
